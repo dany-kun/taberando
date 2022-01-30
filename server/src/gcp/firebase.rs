@@ -1,0 +1,240 @@
+use std::collections::HashMap;
+
+use async_trait::async_trait;
+use rand::seq::IteratorRandom;
+use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use reqwest::Client;
+use warp::Filter;
+
+use crate::app::core::{Meal, Place};
+use crate::http::{HttpClient, HttpResult};
+
+const BASE_URL: &str = "https://taberan-61be7-default-rtdb.firebaseio.com";
+
+const CURRENT_DRAW_PATH: &str = "pending_shop";
+
+struct FirebaseClient {
+    db: String,
+    http_client: Client,
+}
+
+struct OAuth {
+    token: String,
+    project_id: String,
+}
+
+impl From<Meal> for &str {
+    fn from(meal: Meal) -> Self {
+        match meal {
+            Meal::Lunch => "昼だけ",
+            Meal::Dinner => "夜だけ",
+        }
+    }
+}
+
+#[async_trait]
+trait FirebaseApi {
+    async fn get_current_draw(&self) -> HttpResult<Option<String>>;
+
+    async fn draw(&self, meal: Meal) -> HttpResult<Option<String>>;
+
+    async fn add_place(&self, place: Place, meal: Vec<Meal>) -> HttpResult<Place>;
+
+    async fn remove_drawn_place(&self, place: Option<Place>) -> HttpResult<()>;
+
+    async fn delete(&self, place: Place) -> HttpResult<Place>;
+}
+
+impl FirebaseClient {
+    fn firebase_url(&self, path: &str) -> String {
+        format!("{}/{}/{}.json", BASE_URL, self.db, path)
+    }
+
+    async fn get_list_of_places(&self, meal: Meal) -> HttpResult<HashMap<String, String>> {
+        self.http_client
+            .make_json_request(|client| client.get(self.firebase_url(meal.into())))
+            .await
+    }
+}
+
+#[async_trait]
+impl FirebaseApi for FirebaseClient {
+    async fn get_current_draw(&self) -> HttpResult<Option<String>> {
+        self.http_client
+            .make_json_request(|client| client.get(self.firebase_url(CURRENT_DRAW_PATH)))
+            .await
+    }
+
+    async fn draw(&self, meal: Meal) -> HttpResult<Option<String>> {
+        let shops: HashMap<String, String> = self.get_list_of_places(meal).await?;
+        // Pick randomly a shop
+        let shop = shops.values().choose(&mut rand::thread_rng());
+        if let Some(picked) = shop {
+            self.http_client
+                .make_json_request(|client| {
+                    client
+                        .put(self.firebase_url(CURRENT_DRAW_PATH))
+                        .json(picked)
+                })
+                .await?;
+        }
+        Result::Ok(shop.map(|s| s.to_string()))
+    }
+
+    async fn add_place(&self, place: Place, meals: Vec<Meal>) -> HttpResult<Place> {
+        let place_name = &place.clone().name;
+        // TODO improve by running those futures concurrently
+        for meal in meals {
+            let _: HashMap<String, String> = self
+                .http_client
+                .make_json_request(|client| {
+                    client
+                        .post(self.firebase_url(meal.into()))
+                        .json::<String>(place_name)
+                })
+                .await?;
+        }
+        HttpResult::Ok(place)
+    }
+
+    async fn remove_drawn_place(&self, place: Option<Place>) -> HttpResult<()> {
+        let remove_current = self
+            .http_client
+            .make_json_request(|client| client.delete(self.firebase_url(CURRENT_DRAW_PATH)));
+        match place {
+            None => remove_current.await?,
+            Some(place) => {
+                if let Some(drawn_place) = self.get_current_draw().await? {
+                    if place.name == drawn_place {
+                        remove_current.await?;
+                    }
+                }
+            }
+        }
+
+        HttpResult::Ok(())
+    }
+
+    async fn delete(&self, place: Place) -> HttpResult<Place> {
+        // As we are using a very bad data structure we need to loop on all "rows" to find the one to delete
+        // Besides we are too lazy to import new crate and do it asynchronosuly or/and with a functional pattern
+        // mapping meal to entries, filtering and folding into a list of keys to delete...
+        let mut paths_to_delete: Vec<String> = Vec::new();
+        for meal in vec![Meal::Lunch, Meal::Dinner] {
+            let meal_path: &str = meal.clone().into();
+            let places = self.get_list_of_places(meal).await?;
+            for (k, v) in places {
+                if v == place.name {
+                    paths_to_delete.push(format!("{}/{}", meal_path, k));
+                }
+            }
+        }
+        for path in paths_to_delete {
+            self.http_client
+                .make_json_request(|client| client.delete(self.firebase_url(path.as_str())))
+                .await?;
+        }
+        self.remove_drawn_place(Some(place.clone())).await?;
+        HttpResult::Ok(place)
+    }
+}
+
+async fn get_firebase_client(table: String) -> FirebaseClient {
+    let oauth = get_oauth_token().await.unwrap();
+    let _ = env_logger::try_init();
+    let mut header_map = HeaderMap::new();
+
+    let authorization_header = &*format!("Bearer {}", oauth.token);
+    let mut auth_value = HeaderValue::from_str(authorization_header).unwrap();
+    auth_value.set_sensitive(true);
+    header_map.append(AUTHORIZATION, auth_value);
+
+    header_map.append(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+
+    let http_client = Client::builder()
+        .default_headers(header_map)
+        .connection_verbose(true)
+        .build()
+        .unwrap();
+    return FirebaseClient {
+        http_client,
+        db: table,
+    };
+}
+
+async fn get_oauth_token() -> std::result::Result<OAuth, yup_oauth2::Error> {
+    let folder_path = "./src/gcp";
+    // Read application secret from a file. Sometimes it's easier to compile it directly into
+    // the binary. The clientsecret file contains JSON like `{"installed":{"client_id": ... }}`
+    let secret = yup_oauth2::read_service_account_key(format!(
+        "{}/taberan-61be7-e2a3980b7757.json",
+        folder_path
+    ))
+    .await
+    .expect("Could not find service account file");
+
+    let auth = yup_oauth2::ServiceAccountAuthenticator::builder(secret.clone())
+        .persist_tokens_to_disk(format!("{}/tokencache.json", folder_path))
+        .build()
+        .await
+        .unwrap();
+
+    let scopes = &[
+        "https://www.googleapis.com/auth/userinfo.email",
+        "https://www.googleapis.com/auth/firebase.database",
+    ];
+
+    // token(<scopes>) is the one important function of this crate; it does everything to
+    // obtain a token that can be sent e.g. as Bearer token.
+    let token = auth.token(scopes).await?;
+    std::result::Result::Ok(OAuth {
+        token: token.as_str().to_string(),
+        project_id: secret.clone().project_id.unwrap().to_string(),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn it_draw_meal() {
+        let p = get_firebase_client("dev".to_string())
+            .await
+            .draw(Meal::Lunch)
+            .await;
+    }
+
+    #[tokio::test]
+    async fn it_postpones_meal() {
+        let p = get_firebase_client("dev".to_string())
+            .await
+            .remove_drawn_place(Option::None)
+            .await;
+    }
+
+    #[tokio::test]
+    async fn it_adds_place() {
+        let p = get_firebase_client("dev".to_string())
+            .await
+            .add_place(
+                Place {
+                    name: "test_name3".to_string(),
+                },
+                vec![Meal::Dinner, Meal::Lunch],
+            )
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn it_deletes_place() {
+        let p = get_firebase_client("dev".to_string())
+            .await
+            .delete(Place {
+                name: "test_name2".to_string(),
+            })
+            .await
+            .unwrap();
+    }
+}
