@@ -19,8 +19,9 @@ pub enum ApiError {
 #[async_trait]
 pub trait HttpClient {
     type Request;
+    type Client;
 
-    async fn make_json_request<T: DeserializeOwned, O: FnOnce(&Self) -> Self::Request>(
+    async fn make_json_request<T: DeserializeOwned, O: FnOnce(&Self::Client) -> Self::Request>(
         &self,
         to_request: O,
     ) -> HttpResult<T>
@@ -31,8 +32,9 @@ pub trait HttpClient {
 #[async_trait]
 impl HttpClient for Client {
     type Request = reqwest::RequestBuilder;
+    type Client = reqwest::Client;
 
-    async fn make_json_request<T: DeserializeOwned, O: FnOnce(&Self) -> Self::Request>(
+    async fn make_json_request<T: DeserializeOwned, O: FnOnce(&Client) -> Self::Request>(
         &self,
         to_request: O,
     ) -> HttpResult<T>

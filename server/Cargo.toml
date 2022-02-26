@@ -27,3 +27,6 @@ rand = "0.8.4"
 clap = { version = "3.0.10", features = ["derive"] }
 # GCP OAuth
 yup-oauth2 = "6.2.0"
+# Crypto
+ring = "0.16.20"
+base64 = "0.13.0"

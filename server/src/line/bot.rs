@@ -1,11 +1,8 @@
 use serde::Deserialize;
 
-use crate::app::core::{Client, LineChannelKind};
+use crate::app::core::Client;
 use crate::http::HttpResult;
-
-
-
-
+use crate::line::http::{LineChannel, LineClient};
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct EventSource {
@@ -27,24 +24,28 @@ pub struct Postback {
 impl EventSource {
     pub fn to_client(&self) -> Option<Client> {
         match self.source_type.as_str() {
-            "user" => self.user_id.as_ref().map(|id| Client::Line {
-                id: id.clone(),
-                kind: LineChannelKind::User,
+            "user" => self
+                .user_id
+                .clone()
+                .map(|id| Client::Line(LineChannel::User(id))),
+            "group" => self.group_id.clone().map(|id| {
+                Client::Line(LineChannel::Group {
+                    id,
+                    user_id: self.user_id.clone(),
+                })
             }),
-            "group" => self.group_id.as_ref().map(|id| Client::Line {
-                id: id.clone(),
-                kind: LineChannelKind::Group,
-            }),
-            "room" => self.room_id.as_ref().map(|id| Client::Line {
-                id: id.clone(),
-                kind: LineChannelKind::Room,
+            "room" => self.room_id.clone().map(|id| {
+                Client::Line(LineChannel::Room {
+                    id,
+                    user_id: self.user_id.clone(),
+                })
             }),
             _ => Option::None,
         }
     }
 }
 
-pub async fn setup(_client: &reqwest::Client, _source: EventSource) -> HttpResult<()> {
+pub async fn setup(_client: &LineClient, _source: EventSource) -> HttpResult<()> {
     // let menu_id = client.create_rich_menu(&RichMenu::default()).await?;
     // println!("{}", menu_id);
     // client.set_rich_menu(menu_id.as_str()).await?;

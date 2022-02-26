@@ -1,123 +1,167 @@
-use clap::{AppSettings, Arg, ArgMatches};
-use reqwest::Client;
+use clap::{App, AppSettings, Arg, ArgMatches};
+use serde::Deserialize;
+use serde::Serialize;
 
 use line::http;
 use server::line;
 use server::line::api::LineApi;
-use server::line::menu::RichMenu;
+use server::line::http::LineClient;
+use server::line::json::RichMenu;
 
-fn get_line_token(x: Option<String>) -> String {
-    x.or(std::env::var("LINE_TOKEN").ok())
-        .or(std::fs::read_to_string("server/src/line.token").ok())
-        .expect("Please specify a line token")
-}
+const COMMANDS: [Command; 6] = [
+    Command {
+        action: CommandAction::List,
+        help: "List channel menus",
+    },
+    Command {
+        action: CommandAction::Delete,
+        help: "Delete channel menu",
+    },
+    Command {
+        action: CommandAction::Create,
+        help: "Create a channel menu",
+    },
+    Command {
+        action: CommandAction::Default,
+        help: "Get channel default menu",
+    },
+    Command {
+        action: CommandAction::SetDefault,
+        help: "Set channel default menu",
+    },
+    Command {
+        action: CommandAction::SetAlias,
+        help: "Set channel menu alias",
+    },
+];
 
 #[tokio::main]
 async fn main() {
     env_logger::init();
     let line_token_arg = Arg::new("line-token").short('t').takes_value(true);
+    let mut menu_app = clap::App::new("menu")
+        .about("Manage line menus")
+        .setting(AppSettings::SubcommandRequiredElseHelp);
+    for command in COMMANDS {
+        let app: App<'static> = command.into();
+        menu_app = menu_app.subcommand(app.arg(line_token_arg.clone()));
+    }
+
     let matches = clap::App::new("line")
         .version("1.0.0")
         .setting(AppSettings::SubcommandRequiredElseHelp)
-        .subcommand(
-            clap::App::new("menu")
-                .about("Manage line menus")
-                .setting(AppSettings::SubcommandRequiredElseHelp)
-                .subcommand(menus::List::app().arg(line_token_arg.clone()))
-                .subcommand(menus::Default::app().arg(line_token_arg.clone()))
-                .subcommand(menus::SetDefault::app().arg(line_token_arg.clone()))
-                .subcommand(menus::Create::app().arg(line_token_arg.clone()))
-                .subcommand(menus::Delete::app().arg(line_token_arg.clone())),
-        )
+        .subcommand(menu_app)
         .get_matches();
 
     match matches.subcommand() {
-        Some(("menu", cmd_matches)) => match cmd_matches.subcommand() {
-            Some(("list", m)) => {
-                let result = get_http_client(m).get_rich_menus().await.unwrap();
-                println!("{:?}", result)
-            }
-            Some(("create", m)) => {
-                let json_path = m.value_of("json").unwrap();
-                let image_path = m.value_of("image").unwrap();
-                let content = std::fs::read_to_string(json_path).unwrap();
-                let menu = serde_json::from_str::<RichMenu>(&content).unwrap();
-                let image = std::fs::read(image_path).unwrap();
-                let client = get_http_client(m);
-                let result = client.create_rich_menu(&menu, image).await.unwrap();
-                println!("Created menu {:?}", result);
-            }
-            Some(("default", m)) => {
-                let result = get_http_client(m)
-                    .get_default_menu(m.value_of("id"))
-                    .await
-                    .unwrap();
-                println!("{}", result)
-            }
-            Some(("delete", m)) => {
-                let menu_id = m.value_of("id").unwrap();
-                get_http_client(m).delete_rich_menu(menu_id).await.unwrap();
-                println!("Menu {} deleted", menu_id)
-            }
-            Some(("default-set", m)) => {
-                let menu_id = m.value_of("menu").unwrap();
-                let user_id = m.value_of("id");
-                get_http_client(m)
-                    .set_rich_menu(menu_id, user_id)
-                    .await
-                    .unwrap();
-                println!(
-                    "Menu {} set for {}",
-                    menu_id,
-                    user_id
-                        .map(|user_id| format!("user {}", user_id))
-                        .unwrap_or("default".to_string())
-                )
-            }
+        Some(("menu", cmd_matches)) => {
+            if let Some((action, m)) = cmd_matches.subcommand() {
+                let command: CommandAction =
+                    serde_json::from_str(format!("{}{}{}", '"', action, '"').as_str()).unwrap();
+                match command {
+                    CommandAction::List => {
+                        let result = get_http_client(m).get_rich_menus().await.unwrap();
+                        println!("{:?}", result)
+                    }
+                    CommandAction::Delete => {
+                        let menu_id = m.value_of("id").unwrap();
+                        get_http_client(m).delete_rich_menu(menu_id).await.unwrap();
+                        println!("Menu {} deleted", menu_id)
+                    }
 
-            _ => {}
-        },
+                    CommandAction::Create => {
+                        let json_path = m.value_of("json").unwrap();
+                        let image_path = m.value_of("image").unwrap();
+                        let content = std::fs::read_to_string(json_path).unwrap();
+                        let menu = serde_json::from_str::<RichMenu>(&content).unwrap();
+                        let image = std::fs::read(image_path).unwrap();
+                        let client = get_http_client(m);
+                        let result = client.create_rich_menu(&menu, image).await.unwrap();
+                        println!("Created menu {:?}", result);
+                    }
+
+                    CommandAction::Default => {
+                        let result = get_http_client(m)
+                            .get_default_menu(m.value_of("id"))
+                            .await
+                            .unwrap();
+                        println!("{}", result)
+                    }
+
+                    CommandAction::SetDefault => {
+                        let menu_id = m.value_of("menu").unwrap();
+                        let user_id = m.value_of("id");
+                        get_http_client(m)
+                            .set_rich_menu(menu_id, user_id)
+                            .await
+                            .unwrap();
+                        println!(
+                            "Menu {} set for {}",
+                            menu_id,
+                            user_id
+                                .map(|user_id| format!("user {}", user_id))
+                                .unwrap_or("default".to_string())
+                        )
+                    }
+
+                    CommandAction::SetAlias => {
+                        let menu_id = m.value_of("menu").unwrap();
+                        let alias = m.value_of("alias").unwrap();
+                        get_http_client(m)
+                            .set_rich_menu_alias(menu_id, alias)
+                            .await
+                            .unwrap();
+                        println!("Menu alias {} set for menu {}", alias, menu_id)
+                    }
+                }
+            }
+        }
         _ => {}
     }
 }
 
-fn get_http_client(m: &ArgMatches) -> Client {
-    let token = get_line_token(m.value_of_t("line-token").ok());
-    let result = http::get_line_client(Some(token));
-    result
+fn get_http_client(m: &ArgMatches) -> LineClient {
+    let token = m
+        .value_of_t("line-token")
+        .or(std::env::var("LINE_TOKEN"))
+        .expect("Please specify a line token");
+    http::get_line_client(token)
 }
 
-mod menus {
-    use clap::{App, Arg};
+#[derive(Serialize, Deserialize)]
+enum CommandAction {
+    #[serde(rename(serialize = "list", deserialize = "list"))]
+    List,
+    #[serde(rename(serialize = "delete", deserialize = "delete"))]
+    Delete,
+    #[serde(rename(serialize = "create", deserialize = "create"))]
+    Create,
+    #[serde(rename(serialize = "get-default", deserialize = "get-default"))]
+    Default,
+    #[serde(rename(serialize = "set-default", deserialize = "set-default"))]
+    SetDefault,
+    #[serde(rename(serialize = "set-alias", deserialize = "set-alias"))]
+    SetAlias,
+}
 
-    pub struct List;
+struct Command<'a> {
+    action: CommandAction,
+    help: &'a str,
+}
 
-    pub struct Delete;
-
-    pub struct Create;
-
-    pub struct Default;
-
-    pub struct SetDefault;
-
-    impl List {
-        pub fn app() -> App<'static> {
-            clap::App::new("list").about("List line menus")
-        }
-    }
-
-    impl Delete {
-        pub fn app() -> App<'static> {
-            clap::App::new("delete")
-                .about("Delete line menu")
-                .arg(Arg::new("id").short('i').required(true).takes_value(true))
-        }
-    }
-
-    impl Create {
-        pub fn app() -> App<'static> {
-            clap::App::new("create")
-                .about("Create line menu")
+impl From<Command<'static>> for App<'static> {
+    fn from(command: Command<'static>) -> Self {
+        let action_name = serde_json::to_string(&command.action)
+            .unwrap()
+            .trim_matches('"')
+            .to_string();
+        let app = clap::App::new(action_name).about(command.help);
+        match command.action {
+            CommandAction::List => app,
+            CommandAction::Delete => {
+                app.arg(Arg::new("id").short('i').required(true).takes_value(true))
+            }
+            CommandAction::Create => app
                 .arg(
                     Arg::new("json")
                         .help("Path to the source json file")
@@ -131,26 +175,15 @@ mod menus {
                         .short('i')
                         .required(true)
                         .takes_value(true),
-                )
-        }
-    }
-
-    impl Default {
-        pub fn app() -> App<'static> {
-            clap::App::new("default").about("Get the default menu").arg(
+                ),
+            CommandAction::Default => app.arg(
                 Arg::new("id")
                     .short('i')
                     .required(false)
                     .takes_value(true)
                     .help("Optional group/room/user id"),
-            )
-        }
-    }
-
-    impl SetDefault {
-        pub fn app() -> App<'static> {
-            clap::App::new("default-set")
-                .about("Set the default menu")
+            ),
+            CommandAction::SetDefault => app
                 .arg(
                     Arg::new("id")
                         .short('i')
@@ -164,7 +197,23 @@ mod menus {
                         .required(true)
                         .takes_value(true)
                         .help("Menu id"),
+                ),
+
+            CommandAction::SetAlias => app
+                .arg(
+                    Arg::new("alias")
+                        .short('a')
+                        .required(true)
+                        .takes_value(true)
+                        .help("Alias to set on the menu"),
                 )
+                .arg(
+                    Arg::new("menu")
+                        .short('m')
+                        .required(true)
+                        .takes_value(true)
+                        .help("Menu id"),
+                ),
         }
     }
 }

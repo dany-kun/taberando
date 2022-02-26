@@ -1,58 +1,88 @@
-use std::error::Error;
-
-use reqwest::Client;
-use serde::Deserialize;
+use ring::hmac;
 use tokio::sync::mpsc::Sender;
-use warp::http::StatusCode;
-use warp::Filter;
+use warp::http::{HeaderMap, StatusCode};
+use warp::hyper::body::Bytes;
+use warp::{Filter, Rejection, Reply};
 
 use crate::app;
 use crate::app::core::Action;
-use crate::line::menu;
+use crate::line::http::LineClient;
+use crate::line::json;
+use crate::line::json::{Event, Payload};
 
 use super::bot;
 
-#[derive(Debug, Deserialize, Clone)]
-struct Payload {
-    destination: String,
-    events: Vec<Event>,
-}
+#[derive(Debug)]
+struct InvalidWebhookError;
 
-#[derive(Debug, Deserialize, Clone)]
-struct Event {
-    #[serde(rename(deserialize = "type"))]
-    event_type: String,
-    mode: String,
-    source: bot::EventSource,
-    postback: Option<bot::Postback>,
-}
+impl warp::reject::Reject for InvalidWebhookError {}
 
 pub fn route(
-    http_client: Client,
-    tx: Sender<Action>,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    line_client: LineClient,
+    tx: Sender<(String, Action)>,
+) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone + Sync + Send {
+    let key = hmac::Key::new(
+        hmac::HMAC_SHA256,
+        std::env::var("LINE_CHANNEL_SECRET")
+            .expect("Needs to have a LINE_CHANNEL_SECRET env variables to verify incoming webhook")
+            .as_bytes(),
+    );
     warp::path!("line" / "webhook")
-        .and(warp::any().map(move || http_client.clone()))
-        .and(warp::any().map(move || tx.clone()))
+        .and(warp::filters::path::full())
+        .and(warp::header::headers_cloned())
         .and(warp::post())
-        .and(warp::body::json::<Payload>())
-        .map(|client: Client, tx: Sender<Action>, json: Payload| {
-            println!(
-                "Got {} webhook event(s) from {}",
-                json.events.len(),
-                json.destination
-            );
-            tokio::spawn(async move {
-                let actions = parse_webhook_events(client, json).await;
-                for action in actions {
-                    tx.send(action);
-                }
-            });
-            StatusCode::OK
-        })
+        .and(
+            warp::header::<String>("X-Line-Signature")
+                .or(warp::header::<String>("X-Line-Signature"))
+                .unify(),
+        )
+        .and(warp::body::bytes())
+        .and(warp::any().map(move || key.clone()))
+        .and_then(
+            |path: warp::path::FullPath,
+             headers: HeaderMap,
+             header: String,
+             payload: Bytes,
+             key: hmac::Key| async move {
+                println!("{:?}, {:?}", path, headers);
+                std::str::from_utf8(&payload)
+                    .map_err(|_| warp::reject::custom(InvalidWebhookError))
+                    .and_then(|text| {
+                        let signature = ring::hmac::sign(&key, text.as_bytes());
+                        let encoded = base64::encode(signature.as_ref());
+                        if header == encoded {
+                            serde_json::from_str::<Payload>(text)
+                                .map_err(|_| warp::reject::custom(InvalidWebhookError))
+                        } else {
+                            Err(warp::reject::custom(InvalidWebhookError))
+                        }
+                    })
+            },
+        )
+        .and(warp::header::<String>("host"))
+        .and(warp::any().map(move || line_client.clone()))
+        .and(warp::any().map(move || tx.clone()))
+        .map(
+            |json: Payload, host: String, client: LineClient, tx: Sender<(String, Action)>| {
+                println!(
+                    "Got {} webhook event(s) from bot {} @ {}",
+                    json.events.len(),
+                    json.destination,
+                    host
+                );
+                tokio::spawn(async move {
+                    let actions = parse_webhook_events(client, json).await;
+                    for action in actions {
+                        println!("Send {:?}", action);
+                        tx.send((host.clone(), action)).await;
+                    }
+                });
+                StatusCode::OK
+            },
+        )
 }
 
-async fn parse_webhook_events(http_client: Client, payload: Payload) -> Vec<app::core::Action> {
+async fn parse_webhook_events(line_client: LineClient, payload: Payload) -> Vec<app::core::Action> {
     let mut vec: Vec<app::core::Action> = Vec::new();
     for event in payload.events {
         let mode = event.clone().mode;
@@ -61,7 +91,7 @@ async fn parse_webhook_events(http_client: Client, payload: Payload) -> Vec<app:
             "active" => {
                 let event_type = event.event_type.as_str();
                 println!("{:?}", event_type);
-                action(&http_client, event.clone(), event_type).await
+                action(&line_client, event.clone(), event_type).await
             }
             _ => {
                 println!("Unknown event mode {:?}", mode);
@@ -73,37 +103,58 @@ async fn parse_webhook_events(http_client: Client, payload: Payload) -> Vec<app:
             Some(result) => vec.push(result),
         }
     }
+
     return vec;
 }
 
-async fn action(http_client: &Client, event: Event, event_type: &str) -> Option<app::core::Action> {
+async fn action(
+    line_client: &LineClient,
+    event: Event,
+    event_type: &str,
+) -> Option<app::core::Action> {
     match event_type {
         "join" => {
-            bot::setup(&http_client, event.source).await;
+            bot::setup(&line_client, event.source).await;
         }
         "follow" => {
-            bot::setup(&http_client, event.source).await;
+            bot::setup(&line_client, event.source).await;
         }
         "message" => {
-            bot::setup(&http_client, event.source).await;
+            let command = event
+                .message
+                .filter(|m| m.message_type == "text")
+                .and_then(|m| m.text)?
+                .to_lowercase();
+
+            return if let Some(c) = event.source.to_client() {
+                match command.as_str() {
+                    "refresh" => Some(app::core::Action::Refresh(c)),
+                    "whoami" => Some(app::core::Action::WhoAmI(c)),
+                    _ => None,
+                }
+            } else {
+                None
+            };
+            // bot::setup(&http_client, event.source).await;
         }
         "postback" => {
             if let Some(postback) = event.postback {
-                match postback.data.as_str() {
-                    menu::DRAW_LUNCH_ACTION => {
-                        return event
-                            .source
-                            .to_client()
-                            .map(|client| app::core::Action::Draw(client, app::core::Meal::Lunch));
-                    }
-                    menu::DRAW_DINNER_ACTION => {
-                        return event.source.to_client().map(|client| {
-                            app::core::Action::Draw(client, app::core::Meal::Dinner)
-                        });
-                    }
-                    _ => {
-                        println!("Unhandled postback: {}", postback.data);
-                    }
+                if let Some(client) = event.source.to_client() {
+                    return match postback.data.as_str() {
+                        json::DRAW_LUNCH_ACTION => {
+                            Some(app::core::Action::Draw(client, app::core::Meal::Lunch))
+                        }
+                        json::DRAW_DINNER_ACTION => {
+                            Some(app::core::Action::Draw(client, app::core::Meal::Dinner))
+                        }
+                        json::POSTPONE_ACTION => Some(app::core::Action::PostponeCurrent(client)),
+                        json::DELETE_ACTION => Some(app::core::Action::RemoveCurrent(client)),
+                        json::ARCHIVE_ACTION => Some(app::core::Action::ArchiveCurrent(client)),
+                        _ => {
+                            println!("Unhandled postback: {}", postback.data);
+                            None
+                        }
+                    };
                 }
             }
         }

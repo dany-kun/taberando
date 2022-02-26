@@ -1,38 +1,25 @@
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use reqwest::header::{HeaderValue, CONTENT_TYPE};
-use reqwest::{Body, Client};
+use reqwest::Body;
 
-use serde::{Deserialize, Serialize};
+use crate::http::{ApiError, Empty, HttpClient, HttpResult};
+use crate::line::http::LineClient;
 
-use crate::http::{Empty, HttpClient, HttpResult};
-
-
-use super::menu::*;
+use super::json::*;
 
 const BASE_LINE_URL: &str = "https://api.line.me/v2/bot";
-
-#[derive(Debug, Deserialize, Clone)]
-struct RichMenus {
-    #[serde(rename(deserialize = "richmenus"))]
-    rich_menus: Vec<RichMenu>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-struct RichMenuId {
-    #[serde(rename(deserialize = "richMenuId"))]
-    rich_menu_id: String,
-}
-
-#[derive(Serialize)]
-struct WebHookPayload {
-    endpoint: String,
-}
 
 #[async_trait]
 pub trait LineApi {
     async fn set_rich_menu(&self, rich_menu_id: &str, user: Option<&str>) -> HttpResult<Empty>;
 
+    async fn set_rich_menu_alias(&self, rich_menu_id: &str, alias: &str) -> HttpResult<Empty>;
+
     async fn get_rich_menus(&self) -> HttpResult<Vec<RichMenu>>;
+
+    async fn get_rich_menu_id_from_alias(&self, alias: &str) -> HttpResult<String>;
 
     async fn create_rich_menu(&self, menu: &RichMenu, image_bytes: Vec<u8>) -> HttpResult<String>;
 
@@ -42,32 +29,67 @@ pub trait LineApi {
 
     async fn update_line_webhook_url(&self, url: &str) -> HttpResult<Empty>;
 
-    fn api_url(&self, path: &str) -> String {
+    async fn send_messages(&self, message: &Message) -> HttpResult<Empty>;
+
+    fn api_url(path: &str) -> String {
         format!("{}/{}", BASE_LINE_URL, path)
+    }
+
+    async fn set_rich_menu_from_alias(
+        &self,
+        menu_alias: &str,
+        user: Option<&str>,
+    ) -> HttpResult<Empty> {
+        let menu_id = self.get_rich_menu_id_from_alias(menu_alias).await?;
+        self.set_rich_menu(menu_id.as_str(), user).await
     }
 }
 
 #[async_trait]
-impl LineApi for Client {
+impl LineApi for LineClient {
     async fn set_rich_menu(&self, rich_menu_id: &str, user_id: Option<&str>) -> HttpResult<Empty> {
         let path = match user_id {
             Some(id) => format!("user/{}/richmenu/{}", id, rich_menu_id),
             None => format!("user/all/richmenu/{}", rich_menu_id),
         };
-        self.make_json_request(|client| client.post(self.api_url(path.as_str())))
+        self.make_json_request(|client| client.post(Self::api_url(path.as_str())))
             .await
+    }
+
+    async fn set_rich_menu_alias(&self, rich_menu_id: &str, alias: &str) -> HttpResult<Empty> {
+        self.make_json_request(|client| {
+            client
+                .post(Self::api_url("richmenu/alias"))
+                .json(&HashMap::from([
+                    ("richMenuId", rich_menu_id),
+                    ("richMenuAliasId", alias),
+                ]))
+        })
+        .await
     }
 
     async fn get_rich_menus(&self) -> HttpResult<Vec<RichMenu>> {
         let menus: RichMenus = self
-            .make_json_request(|client| client.get(self.api_url("richmenu/list")))
+            .make_json_request(|client| client.get(Self::api_url("richmenu/list")))
             .await?;
         Ok(menus.rich_menus)
     }
 
-    async fn create_rich_menu(&self, _menu: &RichMenu, image: Vec<u8>) -> HttpResult<String> {
+    async fn get_rich_menu_id_from_alias(&self, alias: &str) -> HttpResult<String> {
+        let response: HashMap<String, String> = self
+            .make_json_request(|client| {
+                client.get(Self::api_url(&format!("richmenu/alias/{}", alias)))
+            })
+            .await?;
+        let menu_id = response.get("richMenuId").ok_or(ApiError::Unknown {
+            message: "No menu id from alias".to_string(),
+        })?;
+        HttpResult::Ok(menu_id.to_string())
+    }
+
+    async fn create_rich_menu(&self, menu: &RichMenu, image: Vec<u8>) -> HttpResult<String> {
         let menu: RichMenuId = self
-            .make_json_request(|client| client.post(self.api_url("richmenu")))
+            .make_json_request(|client| client.post(Self::api_url("richmenu")).json(menu))
             .await?;
 
         let menu_id = menu.rich_menu_id;
@@ -75,7 +97,7 @@ impl LineApi for Client {
             "https://api-data.line.me/v2/bot/richmenu/{}/content",
             menu_id
         );
-        let _: () = self
+        let _: Empty = self
             .make_json_request(|client| {
                 client
                     .post(menu_url)
@@ -88,15 +110,15 @@ impl LineApi for Client {
 
     async fn delete_rich_menu(&self, menu_id: &str) -> HttpResult<Empty> {
         self.make_json_request(|client| {
-            client.delete(self.api_url(format!("richmenu/{}", menu_id).as_str()))
+            client.delete(Self::api_url(format!("richmenu/{}", menu_id).as_str()))
         })
         .await
     }
 
     async fn get_default_menu(&self, user_id: Option<&str>) -> HttpResult<String> {
         self.make_json_request(|client| match user_id {
-            Some(id) => client.get(self.api_url(format!("user/{}/richmenu", id).as_str())),
-            None => client.get(self.api_url("user/all/richmenu")),
+            Some(id) => client.get(Self::api_url(format!("user/{}/richmenu", id).as_str())),
+            None => client.get(Self::api_url("user/all/richmenu")),
         })
         .await
         .map(|m: RichMenuId| m.rich_menu_id)
@@ -109,33 +131,14 @@ impl LineApi for Client {
         };
         self.make_json_request(|client| {
             client
-                .put(self.api_url("channel/webhook/endpoint"))
+                .put(Self::api_url("channel/webhook/endpoint"))
                 .json(&payload)
         })
         .await
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn it_gets_menu_list() {
-        let client = client();
-        let menu = client.get_rich_menus().await;
-        match menu {
-            Ok(m) => println!("Got {} menus", m.len()),
-            Err(e) => {
-                println!("Got error {:?}", e)
-            }
-        }
-        assert_eq!(2 + 2, 4);
-    }
-
-    fn client() -> Client {
-        let string = std::fs::read_to_string("../tools/line_tunnel/line.token").unwrap();
-        let client = http::get_line_client(Some(string));
-        client
+    async fn send_messages(&self, message: &Message) -> HttpResult<Empty> {
+        self.make_json_request(|client| client.post(Self::api_url("message/push")).json(message))
+            .await
     }
 }

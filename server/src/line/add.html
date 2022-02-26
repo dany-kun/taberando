@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Add</title>
+    <style>
+      .form-element {
+        margin: 10px;
+      }
+
+    </style>
+</head>
+<body>
+<form action="" method="post" class="input-form">
+    <div class="form-element place-input">
+        <label for="place">入力</label>
+        <input type="text" name="place" id="place" required/>
+    </div>
+    <div class="form-element time-input">
+        いつ？
+        <input type="radio" name="time" id="both" value="both"
+               checked="checked"/>昼また夜
+        <input type="radio" name="time" id="lunch" value="lunch"/>昼
+        <input type="radio" name="time" id="dinner" value="dinner"/>夜
+    </div>
+    <button class="form-element">送信</button>
+</form>
+</body>
+</html>

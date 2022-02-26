@@ -1,14 +1,9 @@
 extern crate server;
 
-
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 
 use regex::Regex;
-
-
-
-
 
 use server::line::api::LineApi;
 use server::line::http;
@@ -18,14 +13,11 @@ use server::line::http;
 fn main() {
     env_logger::init();
     let port = std::env::var("WEBHOOK_LOCAL_PORT").map_or(4001, |v| v.parse::<i32>().unwrap());
-    let path = std::env::current_dir().unwrap();
-    println!("The current directory is {}", path.display());
-    let token = std::fs::read_to_string("./src/line.token").unwrap();
-    open_local_url(port, token);
+    let line_token = std::env::var("LINE_TOKEN").unwrap();
+    open_local_url(port, line_token);
 }
 
 fn open_local_url(port: i32, line_token: String) {
-    // std::thread(move ||
     let child = Command::new("lt")
         .arg("--port")
         .arg(port.to_string())
@@ -63,7 +55,7 @@ fn handle_public_url(line_token: &str, result: &str) {
         .build()
         .unwrap()
         .block_on(async {
-            http::get_line_client(Some(line_token.to_string()))
+            http::get_line_client(line_token.to_string())
                 .update_line_webhook_url(result)
                 .await
                 .unwrap();

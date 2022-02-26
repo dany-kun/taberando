@@ -1,5 +1,6 @@
 pub mod api;
 pub mod bot;
+pub mod html;
 pub mod http;
-pub mod menu;
+pub mod json;
 pub mod webhook;

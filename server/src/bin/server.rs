@@ -1,41 +1,51 @@
-
-
-use reqwest::Client;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::{Receiver, Sender};
 use warp::Filter;
 
-use server::app;
 use server::app::core::Action;
-use server::line::webhook;
-use server::line::{http};
+use server::{app, gcp, line};
 
 #[tokio::main]
 async fn main() {
     env_logger::init();
 
     let port = 4001;
-    let http_client = http::get_line_client(None);
+    let line_token = std::env::var("LINE_TOKEN").expect("Please specify a LINE_TOKEN env variable");
+    let line_client = line::http::get_line_client(line_token);
+    let firebase_client = gcp::firebase::get_firebase_client().await;
 
     let (tx, rx) = mpsc::channel(32);
 
-    tokio::try_join!(launch_server(port, http_client, tx), launch_core_agent(rx));
+    tokio::try_join!(
+        launch_server(port, &line_client, tx),
+        launch_core_agent(rx, &line_client, &firebase_client)
+    );
 }
 
 async fn launch_server(
     port: u16,
-    http_client: Client,
-    tx: Sender<Action>,
+    line_client: &line::http::LineClient,
+    tx: Sender<(String, Action)>,
 ) -> Result<(), &'static str> {
-    warp::serve(webhook::route(http_client, tx.clone()).with(warp::log("")))
-        .run(([127, 0, 0, 1], port))
-        .await;
+    warp::serve(
+        line::webhook::route(line_client.clone(), tx.clone())
+            .or(line::html::route(tx.clone()))
+            .with(warp::log("")),
+    )
+    .run(([127, 0, 0, 1], port))
+    .await;
     Result::Ok(())
 }
 
-async fn launch_core_agent(mut rx: Receiver<app::core::Action>) -> Result<(), &'static str> {
-    while let Some(_action) = rx.recv().await {
-        println!("Got action")
+async fn launch_core_agent(
+    mut rx: Receiver<(String, Action)>,
+    line_client: &line::http::LineClient,
+    firebase_client: &reqwest::Client,
+) -> Result<(), &'static str> {
+    println!("Receiving");
+    while let Some(action) = rx.recv().await {
+        println!("Got action {:?}", action);
+        app::core::handle_action(action, line_client, firebase_client).await;
     }
     Result::Ok(())
 }
