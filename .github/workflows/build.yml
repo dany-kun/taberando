@@ -23,7 +23,7 @@ jobs:
 
 
       - name: Build Docker image
-        run: docker build -t registry.heroku.com/${{ secrets.HEROKU_APP }}/web:latest .
+        run: docker build -t registry.heroku.com/${{ secrets.HEROKU_APP }}/web:latest --build-arg FIREBASE_JAR_OVERRIDES='${{ secrets.FIREBASE_JAR_OVERRIDES }}' .
 
       - name: Docker image info
         run: docker images
