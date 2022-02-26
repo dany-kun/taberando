@@ -45,6 +45,8 @@ WORKDIR /taberando
 
 # Copy our build
 COPY --from=builder /taberando/target/release/server ./
+# Copy resources
+COPY --from=builder /taberando/resources ./resources
 
 # Use an unprivileged user.
 USER taberando:taberando

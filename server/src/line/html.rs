@@ -32,7 +32,7 @@ pub fn route(
         .and(warp::get())
         .map(|_| ())
         .untuple_one()
-        .and(warp::fs::file("./src/line/add.html"));
+        .and(warp::fs::file("./resources/line/add.html"));
     let form_post = warp::post()
         .and(source)
         .and(warp::body::form::<Entry>())
@@ -53,13 +53,9 @@ pub fn route(
             },
         )
         .untuple_one()
-        .and(warp::fs::file("./src/line/autoclose.html"));
+        .and(warp::fs::file("./resources/line/autoclose.html"));
 
-    warp::path!("line" / "draw").and(
-        form_get
-            .or(form_post)
-            .or(warp::method().map(|method| format!("You sent a {} request!", method))),
-    )
+    warp::path!("line" / "draw").and(form_get.or(form_post))
 }
 
 fn to_action(source: &Source, body: &Entry) -> Option<Action> {
