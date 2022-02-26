@@ -9,7 +9,9 @@ use server::{app, gcp, line};
 async fn main() {
     env_logger::init();
 
-    let port = 4001;
+    let port = std::env::var("PORT")
+        .map(|port| port.parse::<u16>().unwrap())
+        .unwrap_or(4001);
     let line_token = std::env::var("LINE_TOKEN").expect("Please specify a LINE_TOKEN env variable");
     let line_client = line::http::get_line_client(line_token);
     let firebase_client = gcp::firebase::get_firebase_client().await;
@@ -32,7 +34,7 @@ async fn launch_server(
             .or(line::html::route(tx.clone()))
             .with(warp::log("")),
     )
-    .run(([127, 0, 0, 1], port))
+    .run(([0, 0, 0, 0], port))
     .await;
     Result::Ok(())
 }
