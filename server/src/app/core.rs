@@ -77,7 +77,7 @@ pub(crate) fn map_jar_to_alias(jar_key: &str) -> gcp::firebase::Jar {
 fn jar_to_alias_overrides() -> Result<HashMap<String, String>, JarError> {
     option_env!("FIREBASE_JAR_OVERRIDES")
         .ok_or(JarError)
-        .and_then(|file| serde_json::from_reader(BufReader::new(file)).map_err(|_| JarError))
+        .and_then(|env| serde_json::from_str(env).map_err(|_| JarError))
 }
 
 #[cfg(debug_assertions)]
