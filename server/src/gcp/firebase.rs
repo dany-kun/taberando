@@ -135,8 +135,12 @@ impl FirebaseApi for Client {
         jar: &Jar,
         meal: Meal,
     ) -> HttpResult<HashMap<String, String>> {
-        self.make_json_request(|client| client.get(self.firebase_url(jar, meal.into())))
-            .await
+        let result: HttpResult<Option<HashMap<String, String>>> = self
+            .make_json_request(|client| client.get(self.firebase_url(jar, meal.into())))
+            .await;
+        // If not places [no entry in DB]; might return null as node is no longer existing;
+        // default to empty map
+        result.map(|places| places.unwrap_or(HashMap::new()))
     }
 }
 

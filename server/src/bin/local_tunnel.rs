@@ -12,15 +12,17 @@ use server::line::http;
 
 fn main() {
     env_logger::init();
-    let port = std::env::var("WEBHOOK_LOCAL_PORT").map_or(4001, |v| v.parse::<i32>().unwrap());
+    let port = std::env::var("WEBHOOK_LOCAL_PORT").map_or(4010, |v| v.parse::<i32>().unwrap());
     let line_token = std::env::var("LINE_TOKEN").unwrap();
     open_local_url(port, line_token);
 }
 
 fn open_local_url(port: i32, line_token: String) {
-    let child = Command::new("lt")
-        .arg("--port")
+    let child = Command::new("../ngrok")
+        .arg("http")
         .arg(port.to_string())
+        .arg("--log")
+        .arg("stdout")
         .stdout(Stdio::piped())
         .spawn()
         .expect(&*format!(
@@ -37,13 +39,14 @@ fn open_local_url(port: i32, line_token: String) {
 }
 
 fn parse_output(output: String, line_token: &str) {
-    let lt_url_regex: Regex = Regex::new(r"your url is: (\S+)").unwrap();
+    let lt_url_regex: Regex = Regex::new(r"url=https(\S+)").unwrap();
 
     match lt_url_regex.captures(&*output) {
         Some(matches) => {
             let result = matches.get(1).map_or("", |m| m.as_str()).trim();
-            println!("Exposing localhost to {}", result);
-            handle_public_url(line_token, result);
+            let scheme_result = format!("https{}", result);
+            println!("Exposing localhost to {}", scheme_result);
+            handle_public_url(line_token, &scheme_result);
         }
         None => println!("Got unhandled output from lt: \"{}\"", output),
     };
