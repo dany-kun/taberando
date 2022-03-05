@@ -150,6 +150,7 @@ async fn action(
                         json::POSTPONE_ACTION => Some(app::core::Action::PostponeCurrent(client)),
                         json::DELETE_ACTION => Some(app::core::Action::RemoveCurrent(client)),
                         json::ARCHIVE_ACTION => Some(app::core::Action::ArchiveCurrent(client)),
+                        json::REFRESH_ACTION => Some(app::core::Action::Refresh(client)),
                         _ => {
                             println!("Unhandled postback: {}", postback.data);
                             None

@@ -10,6 +10,7 @@ pub const POSTPONE_ACTION: &str = "postpone_action";
 pub const DELETE_ACTION: &str = "delete_action";
 pub const ARCHIVE_ACTION: &str = "archive_action";
 pub const ADD_ACTION: &str = "add_action";
+pub const REFRESH_ACTION: &str = "refresh_action";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Message {

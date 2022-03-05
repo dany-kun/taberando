@@ -1,0 +1,23 @@
+{
+  "size": {
+    "width": 2500,
+    "height": 843
+  },
+  "selected": false,
+  "name": "更新",
+  "chatBarText": "メニュー",
+  "areas": [
+    {
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 2500,
+        "height": 843
+      },
+      "action": {
+        "type": "postback",
+        "data": "refresh_action"
+      }
+    }
+  ]
+}
