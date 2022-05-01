@@ -1,9 +1,9 @@
 # Taberando
 
-[Line](https://line.me) message application bot to randomly draw places/foot to
+[Line](https://line.me) message application bot to randomly draw places/food to
 eat lunch or dinner. Each discussion with the bot allow participants to add
 places to eat. Every participant can also randomly draw a place from the already
-registered places by all group participants
+registered places by all group participants.
 
 This project was started to learn Rust and the code is therefore to be optimised
 and improved. Besides, it surely has some security flaws (the data stored for
@@ -16,7 +16,7 @@ Add the [Taberando](1656926700) bot as a friend on Line or invite the bot to a
 group/chat room. Every discussion with the bot happens within the context of the
 Line group/chat discussion and does not leak outside.
 
-Communication with the bot happens in 3 steps:
+Communication with the bot happens in 2 steps:
 
 **Editing/drawing step:** allows to either add entries (places to eat) to the
 database or to draw a place to eat.
@@ -38,8 +38,9 @@ Actions:
 - 削除: Delete the place from the data store
 
 :warning: The bot can sometimes be out of sync (bug, issues) or not showing any
-Line quick reply buttons. Sending the command `Refresh` to the discussion with
-the bot reset and synchronize the bot status (no impact on the stored data)
+[Line quick reply buttons](https://developers.line.biz/en/docs/messaging-api/using-quick-reply).
+Sending the command `Refresh` to the discussion with
+the bot reset and synchronize the bot status (no impact on the stored data).
 
 ### Data storage
 
@@ -59,7 +60,7 @@ the bot to reply.
   tool ([Clippy?](https://github.com/rust-lang/rust-clippy))
 - [ ] Improve multi-threading
 - [ ] Allow for more flexibility on the data by adding a tag system
-- [ ] Improve data structure or data storage to be more performant and avoid N+1
+- [ ] Improve data structure and data storage to be more performant and avoid N+1
   issues
 
 ### Environment Variables
