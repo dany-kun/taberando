@@ -33,6 +33,7 @@ Actions:
 
 ![Resolution](docs/Resolution.jpeg)
 
+- 追加:  Add a place
 - 完食: Went eating to the place
 - 延期: Postpone the place for another time
 - 削除: Delete the place from the data store
