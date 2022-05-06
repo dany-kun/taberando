@@ -18,7 +18,7 @@ jobs:
           cargo --version --verbose
           rustc --version
       - name: Build Docker image
-        run: docker build -t registry.heroku.com/${{ secrets.HEROKU_APP }}/web:latest --build-arg FIREBASE_JAR_OVERRIDES='${{ secrets.FIREBASE_JAR_OVERRIDES }}' .
+        run: docker build -t registry.heroku.com/${{ secrets.HEROKU_APP }}/web:latest --build-arg FIREBASE_JAR_OVERRIDES='${{ secrets.FIREBASE_JAR_OVERRIDES }}' --build-arg  FIREBASE_URL='${{ secrets.FIREBASE_URL }}' .
       - name: Docker image info
         run: docker images
       - name: Login to container registry

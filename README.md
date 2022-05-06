@@ -39,9 +39,9 @@ Actions:
 - 削除: Delete the place from the data store
 
 :warning: The bot can sometimes be out of sync (bug, issues) or not showing any
-[Line quick reply buttons](https://developers.line.biz/en/docs/messaging-api/using-quick-reply).
-Sending the command `Refresh` to the discussion with
-the bot reset and synchronize the bot status (no impact on the stored data).
+[Line quick reply buttons](https://developers.line.biz/en/docs/messaging-api/using-quick-reply)
+. Sending the command `Refresh` to the discussion with the bot reset and
+synchronize the bot status (no impact on the stored data).
 
 ### Data storage
 
@@ -61,8 +61,8 @@ the bot to reply.
   tool ([Clippy?](https://github.com/rust-lang/rust-clippy))
 - [ ] Improve multi-threading
 - [ ] Allow for more flexibility on the data by adding a tag system
-- [ ] Improve data structure and data storage to be more performant and avoid N+1
-  issues
+- [ ] Improve data structure and data storage to be more performant and avoid
+  N+1 issues
 
 ### Environment Variables
 
@@ -71,3 +71,10 @@ the bot to reply.
 | LINE_CHANNEL_SECRET | To verify Line webhook fingerprint                                                     |
 | LINE_TOKEN          | Line API OAuth token                                                                   |
 | GOOGLE_CREDENTIALS  | Google Service account json as String [Firebase API] ; used for the Firebase datastore |
+
+### Develop locally
+
+The bot rely on a configured Line webhook url. In order to point the webhook to
+a local port, the software `ngrok` is used. The bin `local_tunnel`
+open a local port to the world under a generated url and update the Line webhook
+configuration to use the generated url.  

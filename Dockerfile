@@ -5,6 +5,7 @@
 ####################################################################################################
 FROM rust:latest AS builder
 
+ARG FIREBASE_URL
 ARG FIREBASE_JAR_OVERRIDES
 
 RUN update-ca-certificates
@@ -27,7 +28,7 @@ COPY ./server ./taberando
 
 WORKDIR /taberando
 
-RUN FIREBASE_JAR_OVERRIDES=${FIREBASE_JAR_OVERRIDES} cargo build --release
+RUN FIREBASE_JAR_OVERRIDES=${FIREBASE_JAR_OVERRIDES} FIREBASE_URL=${FIREBASE_URL} cargo build --release
 
 ####################################################################################################
 ## Final image

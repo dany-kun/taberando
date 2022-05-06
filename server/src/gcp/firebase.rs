@@ -8,7 +8,7 @@ use reqwest::Client;
 use crate::app::core::{Meal, Place};
 use crate::http::{HttpClient, HttpResult};
 
-const BASE_URL: &str = "https://taberan-61be7-default-rtdb.firebaseio.com";
+const BASE_URL: &str = env!("FIREBASE_URL");
 
 const CURRENT_DRAW_PATH: &str = "pending_shop";
 
@@ -169,16 +169,14 @@ struct Error;
 async fn get_oauth_token() -> std::result::Result<OAuth, yup_oauth2::Error> {
     // Read application secret from a file. Sometimes it's easier to compile it directly into
     // the binary. The clientsecret file contains JSON like `{"installed":{"client_id": ... }}`
-    let secret = yup_oauth2::read_service_account_key(format!(
-        "{}/taberan-61be7-e2a3980b7757.json",
-        FOLDER_PATH
-    ))
-    .await
-    .map_err(|_| Error)
-    .or(std::env::var("GOOGLE_CREDENTIALS")
-        .map_err(|_| Error)
-        .and_then(|json| yup_oauth2::parse_service_account_key(json).map_err(|_| Error)))
-    .expect("Could not find service account file");
+    let secret =
+        yup_oauth2::read_service_account_key(format!("{}/service_account.json", FOLDER_PATH))
+            .await
+            .map_err(|_| Error)
+            .or(std::env::var("GOOGLE_CREDENTIALS")
+                .map_err(|_| Error)
+                .and_then(|json| yup_oauth2::parse_service_account_key(json).map_err(|_| Error)))
+            .expect("Could not find service account file");
 
     let auth = yup_oauth2::ServiceAccountAuthenticator::builder(secret.clone())
         // .persist_tokens_to_disk(format!("{}/tokencache.json", FOLDER_PATH))
