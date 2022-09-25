@@ -22,7 +22,7 @@ tokio = { version = "1.15.0", features = ["full"] }
 warp = "0.3.2"
 serde = { version = "1.0.133", features = ["derive"] }
 serde_json = "1.0.74"
-regex = "1.5.4"
+regex = "1.5.5"
 rand = "0.8.4"
 clap = { version = "3.0.10", features = ["derive"] }
 # GCP OAuth
