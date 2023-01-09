@@ -25,10 +25,7 @@ fn open_local_url(port: i32, line_token: String) {
         .arg("stdout")
         .stdout(Stdio::piped())
         .spawn()
-        .expect(&*format!(
-            "failed to execute lt opening port process on port {}",
-            port
-        ));
+        .unwrap_or_else(|_| panic!("failed to execute lt opening port process on port {}", port));
 
     let out = BufReader::new(child.stdout.unwrap());
 
@@ -41,7 +38,7 @@ fn open_local_url(port: i32, line_token: String) {
 fn parse_output(output: String, line_token: &str) {
     let lt_url_regex: Regex = Regex::new(r"url=https(\S+)").unwrap();
 
-    match lt_url_regex.captures(&*output) {
+    match lt_url_regex.captures(&output) {
         Some(matches) => {
             let result = matches.get(1).map_or("", |m| m.as_str()).trim();
             let scheme_result = format!("https{}", result);

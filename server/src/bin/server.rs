@@ -18,7 +18,7 @@ async fn main() {
 
     let (tx, rx) = mpsc::channel(32);
 
-    tokio::try_join!(
+    let _ = tokio::try_join!(
         launch_server(port, &line_client, tx),
         launch_core_agent(rx, &line_client, &firebase_client)
     );

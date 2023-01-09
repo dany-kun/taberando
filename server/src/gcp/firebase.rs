@@ -2,12 +2,10 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use rand::seq::IteratorRandom;
-use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 use reqwest::Client;
 
 use crate::app::core::{Meal, Place};
 use crate::gcp::constants::BASE_URL;
-use crate::gcp::oauth;
 use crate::http::{HttpClient, HttpResult};
 
 const CURRENT_DRAW_PATH: &str = "pending_shop";
@@ -133,7 +131,6 @@ impl FirebaseApi for Client {
             .await;
         // If not places [no entry in DB]; might return null as node is no longer existing;
         // default to empty map
-        result.map(|places| places.unwrap_or(HashMap::new()))
+        result.map(|places| places.unwrap_or_default())
     }
 }
-
