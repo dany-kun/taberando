@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use rand::seq::IteratorRandom;
 use reqwest::Client;
+use serde::de::DeserializeOwned;
 
 use crate::app::core::{Meal, Place};
 use crate::gcp::constants::BASE_URL;
@@ -19,6 +20,10 @@ impl From<Meal> for &str {
             Meal::Dinner => "夜だけ",
         }
     }
+}
+
+pub struct FirebaseApiV1 {
+    client: reqwest::Client,
 }
 
 #[async_trait]
@@ -44,8 +49,24 @@ pub trait FirebaseApi {
     }
 }
 
+impl FirebaseApiV1 {
+    pub fn new(client: reqwest::Client) -> FirebaseApiV1 {
+        FirebaseApiV1 { client }
+    }
+
+    async fn make_json_request<T: DeserializeOwned, O: FnOnce(&Client) -> reqwest::RequestBuilder>(
+        &self,
+        to_request: O,
+    ) -> HttpResult<T>
+    where
+        O: Send,
+    {
+        self.client.make_json_request(to_request).await
+    }
+}
+
 #[async_trait]
-impl FirebaseApi for Client {
+impl FirebaseApi for FirebaseApiV1 {
     async fn get_current_draw(&self, jar: &Jar) -> HttpResult<Option<String>> {
         self.make_json_request(|client| client.get(self.firebase_url(jar, CURRENT_DRAW_PATH)))
             .await

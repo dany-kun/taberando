@@ -3,6 +3,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use warp::Filter;
 
 use server::app::core::Action;
+use server::gcp::api::{FirebaseApi, FirebaseApiV1};
 use server::{app, gcp, line};
 
 #[tokio::main]
@@ -18,9 +19,10 @@ async fn main() {
 
     let (tx, rx) = mpsc::channel(32);
 
+    let fc = FirebaseApiV1::new(firebase_client);
     let _ = tokio::try_join!(
         launch_server(port, &line_client, tx),
-        launch_core_agent(rx, &line_client, &firebase_client)
+        launch_core_agent(rx, &line_client, &fc)
     );
 }
 
@@ -39,10 +41,10 @@ async fn launch_server(
     Result::Ok(())
 }
 
-async fn launch_core_agent(
+async fn launch_core_agent<T: FirebaseApi + Sync>(
     mut rx: Receiver<(String, Action)>,
     line_client: &line::http::LineClient,
-    firebase_client: &reqwest::Client,
+    firebase_client: &T,
 ) -> Result<(), &'static str> {
     println!("Receiving");
     while let Some(action) = rx.recv().await {

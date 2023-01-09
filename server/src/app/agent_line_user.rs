@@ -2,15 +2,15 @@ use async_trait::async_trait;
 
 use crate::app::agent::Agent;
 use crate::app::core::{Client, Meal, Place};
-use crate::gcp::firebase::{FirebaseApi, Jar};
+use crate::gcp::api::{FirebaseApi, Jar};
 use crate::http::{Empty, HttpResult};
 use crate::line::http::{LineChannel, LineClient};
 use crate::line::json;
 use crate::line::json::{MessageContent, QuickReply};
 
-async fn get_current_draw(
+async fn get_current_draw<T: FirebaseApi + Sync>(
     client: &Client,
-    firebase_client: &reqwest::Client,
+    firebase_client: &T,
 ) -> (Jar, HttpResult<Option<String>>) {
     let jar: Jar = client.into();
     let draw = firebase_client.get_current_draw(&jar).await;
@@ -67,10 +67,10 @@ impl Client {
     }
 }
 
-async fn delete_current<F: FnOnce(String) -> String>(
+async fn delete_current<F: FnOnce(String) -> String, T: FirebaseApi + Sync>(
     client: &Client,
     line_client: &LineClient,
-    firebase_client: &reqwest::Client,
+    firebase_client: &T,
     host: &str,
     message_formatter: F,
 ) {
@@ -104,10 +104,10 @@ async fn delete_current<F: FnOnce(String) -> String>(
 }
 
 impl LineClient {
-    async fn refresh<F: FnOnce(&Option<String>) -> String>(
+    async fn refresh<F: FnOnce(&Option<String>) -> String, T: FirebaseApi + Sync>(
         &self,
         client: &Client,
-        firebase_client: &reqwest::Client,
+        firebase_client: &T,
         host: &str,
         message: F,
     ) {
@@ -180,7 +180,12 @@ impl Agent for LineClient {
         }
     }
 
-    async fn refresh(&self, client: &Client, firebase_client: &reqwest::Client, host: &str) {
+    async fn refresh<T: FirebaseApi + Sync>(
+        &self,
+        client: &Client,
+        firebase_client: &T,
+        host: &str,
+    ) {
         // Add count
         self.refresh(client, firebase_client, host, |draw| match draw {
             None => "無予定".to_string(),
@@ -189,11 +194,11 @@ impl Agent for LineClient {
         .await;
     }
 
-    async fn try_draw(
+    async fn try_draw<T: FirebaseApi + Sync>(
         &self,
         meal: Meal,
         client: &Client,
-        firebase_client: &reqwest::Client,
+        firebase_client: &T,
         host: &str,
     ) {
         let (jar, draw) = get_current_draw(client, firebase_client).await;
@@ -233,7 +238,12 @@ impl Agent for LineClient {
         }
     }
 
-    async fn postpone(&self, client: &Client, firebase_client: &reqwest::Client, host: &str) {
+    async fn postpone<T: FirebaseApi + Sync>(
+        &self,
+        client: &Client,
+        firebase_client: &T,
+        host: &str,
+    ) {
         let (jar, draw) = get_current_draw(client, firebase_client).await;
         match draw {
             Ok(draw) => match draw {
@@ -263,17 +273,22 @@ impl Agent for LineClient {
         }
     }
 
-    async fn delete_current(&self, client: &Client, firebase_client: &reqwest::Client, host: &str) {
+    async fn delete_current<T: FirebaseApi + Sync>(
+        &self,
+        client: &Client,
+        firebase_client: &T,
+        host: &str,
+    ) {
         delete_current(client, self, firebase_client, host, |draw| {
             format!("「{}」を削除しました", &draw)
         })
         .await;
     }
 
-    async fn archive_current(
+    async fn archive_current<T: FirebaseApi + Sync>(
         &self,
         client: &Client,
-        firebase_client: &reqwest::Client,
+        firebase_client: &T,
         host: &str,
     ) {
         delete_current(client, self, firebase_client, host, |draw| {
@@ -282,10 +297,10 @@ impl Agent for LineClient {
         .await;
     }
 
-    async fn add_place(
+    async fn add_place<T: FirebaseApi + Sync>(
         &self,
         client: &Client,
-        firebase_client: &reqwest::Client,
+        firebase_client: &T,
         place: Place,
         meals: Vec<Meal>,
         host: &str,
