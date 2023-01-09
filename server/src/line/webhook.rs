@@ -17,7 +17,6 @@ struct InvalidWebhookError;
 
 impl warp::reject::Reject for InvalidWebhookError {}
 
-
 #[allow(opaque_hidden_inferred_bound)]
 pub fn route(
     line_client: LineClient,

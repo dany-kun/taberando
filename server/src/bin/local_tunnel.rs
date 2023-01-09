@@ -25,10 +25,7 @@ fn open_local_url(port: i32, line_token: String) {
         .arg("stdout")
         .stdout(Stdio::piped())
         .spawn()
-        .unwrap_or_else(|_| panic!(
-            "failed to execute lt opening port process on port {}",
-            port
-        ));
+        .unwrap_or_else(|_| panic!("failed to execute lt opening port process on port {}", port));
 
     let out = BufReader::new(child.stdout.unwrap());
 

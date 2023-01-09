@@ -120,10 +120,10 @@ impl LineClient {
                     MessageContent::text(&text_message)
                         .with_quick_replies(client.on_draw_quick_replies(host))
                 })
-                    .unwrap_or_else(||
-                                        MessageContent::text(&text_message)
-                                            .with_quick_replies(client.default_quick_replies(host)),
-                    )
+                .unwrap_or_else(|| {
+                    MessageContent::text(&text_message)
+                        .with_quick_replies(client.default_quick_replies(host))
+                })
             })
             .unwrap_or_else(|e| MessageContent::error_message(&e));
         let _ = self.send_to_all_users(client, message).await;
@@ -174,7 +174,8 @@ impl Agent for LineClient {
             },
         };
         if let Some(id) = user_id {
-            let _ = self.send_to_single_user(client, MessageContent::text(id))
+            let _ = self
+                .send_to_single_user(client, MessageContent::text(id))
                 .await;
         }
     }
@@ -185,7 +186,7 @@ impl Agent for LineClient {
             None => "無予定".to_string(),
             Some(draw) => format!("予定中:{}", draw),
         })
-            .await;
+        .await;
     }
 
     async fn try_draw(
@@ -206,25 +207,27 @@ impl Agent for LineClient {
                                 MessageContent::text(&format!("「{}」が出ました", draw))
                                     .with_quick_replies(client.on_draw_quick_replies(host))
                             })
-                                .unwrap_or_else(||
-                                    MessageContent::text("何も出ませんでした")
-                                        .with_quick_replies(vec![client.add_place_quick_reply(host)]),
-                                )
+                            .unwrap_or_else(|| {
+                                MessageContent::text("何も出ませんでした")
+                                    .with_quick_replies(vec![client.add_place_quick_reply(host)])
+                            })
                         })
                         .unwrap_or_else(|e| MessageContent::error_message(&e));
                     let _ = self.send_to_all_users(client, message).await;
                 }
                 Some(draw) => {
-                    let _ = self.send_to_all_users(
-                        client,
-                        MessageContent::text(&format!("「{}」が既に出ています", draw))
-                            .with_quick_replies(client.on_draw_quick_replies(host)),
-                    )
+                    let _ = self
+                        .send_to_all_users(
+                            client,
+                            MessageContent::text(&format!("「{}」が既に出ています", draw))
+                                .with_quick_replies(client.on_draw_quick_replies(host)),
+                        )
                         .await;
                 }
             },
             Err(e) => {
-                let _ = self.send_to_all_users(client, MessageContent::error_message(&e))
+                let _ = self
+                    .send_to_all_users(client, MessageContent::error_message(&e))
                     .await;
             }
         }
@@ -243,16 +246,18 @@ impl Agent for LineClient {
                     let _ = firebase_client
                         .remove_drawn_place(&jar, Some(Place { name: draw.clone() }))
                         .await;
-                    let _ = self.send_to_all_users(
-                        client,
-                        MessageContent::text(&format!("{}を延期しました", &draw))
-                            .with_quick_replies(client.default_quick_replies(host)),
-                    )
+                    let _ = self
+                        .send_to_all_users(
+                            client,
+                            MessageContent::text(&format!("{}を延期しました", &draw))
+                                .with_quick_replies(client.default_quick_replies(host)),
+                        )
                         .await;
                 }
             },
             Err(e) => {
-                let _ = self.send_to_all_users(client, MessageContent::error_message(&e))
+                let _ = self
+                    .send_to_all_users(client, MessageContent::error_message(&e))
                     .await;
             }
         }
@@ -262,7 +267,7 @@ impl Agent for LineClient {
         delete_current(client, self, firebase_client, host, |draw| {
             format!("「{}」を削除しました", &draw)
         })
-            .await;
+        .await;
     }
 
     async fn archive_current(
@@ -274,7 +279,7 @@ impl Agent for LineClient {
         delete_current(client, self, firebase_client, host, |draw| {
             format!("「{}」は完食になりました", &draw)
         })
-            .await;
+        .await;
     }
 
     async fn add_place(
@@ -292,10 +297,11 @@ impl Agent for LineClient {
                 self.refresh(client, firebase_client, host, |_| {
                     "新しい店が追加されました".to_string()
                 })
-                    .await;
+                .await;
             }
             Err(e) => {
-                let _ = self.send_to_single_user(client, MessageContent::error_message(&e))
+                let _ = self
+                    .send_to_single_user(client, MessageContent::error_message(&e))
                     .await;
             }
         }

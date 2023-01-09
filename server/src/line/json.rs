@@ -91,9 +91,7 @@ impl MessageContent {
     }
 
     pub fn with_quick_replies(&mut self, replies: Vec<QuickReply>) -> MessageContent {
-        self.quick_replies = Some(QuickReplyItems {
-            items: replies,
-        });
+        self.quick_replies = Some(QuickReplyItems { items: replies });
         self.clone()
     }
 

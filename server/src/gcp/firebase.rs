@@ -174,9 +174,11 @@ async fn get_oauth_token() -> std::result::Result<OAuth, yup_oauth2::Error> {
         yup_oauth2::read_service_account_key(format!("{}/service_account.json", FOLDER_PATH))
             .await
             .map_err(|_| Error)
-            .or_else(|_| std::env::var("GOOGLE_CREDENTIALS")
-                .map_err(|_| Error)
-                .and_then(|json| yup_oauth2::parse_service_account_key(json).map_err(|_| Error)))
+            .or_else(|_| {
+                std::env::var("GOOGLE_CREDENTIALS")
+                    .map_err(|_| Error)
+                    .and_then(|json| yup_oauth2::parse_service_account_key(json).map_err(|_| Error))
+            })
             .expect("Could not find service account file");
 
     let auth = yup_oauth2::ServiceAccountAuthenticator::builder(secret.clone())
