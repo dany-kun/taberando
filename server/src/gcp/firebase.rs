@@ -166,7 +166,7 @@ pub async fn get_firebase_client() -> Client {
 #[derive(Debug)]
 struct Error;
 
-async fn get_oauth_token() -> std::result::Result<OAuth, yup_oauth2::Error> {
+async fn get_oauth_token() -> Result<OAuth, yup_oauth2::Error> {
     // Read application secret from a file. Sometimes it's easier to compile it directly into
     // the binary. The clientsecret file contains JSON like `{"installed":{"client_id": ... }}`
     let secret =
