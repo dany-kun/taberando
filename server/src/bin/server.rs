@@ -14,7 +14,7 @@ async fn main() {
         .unwrap_or(4001);
     let line_token = std::env::var("LINE_TOKEN").expect("Please specify a LINE_TOKEN env variable");
     let line_client = line::http::get_line_client(line_token);
-    let firebase_client = gcp::firebase::get_firebase_client().await;
+    let firebase_client = gcp::client::get_firebase_client().await;
 
     let (tx, rx) = mpsc::channel(32);
 
