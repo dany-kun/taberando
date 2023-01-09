@@ -1,0 +1,27 @@
+name: CI
+
+on: push
+
+jobs:
+  analysis:
+    runs-on: ubuntu-latest
+    env:
+      FIREBASE_URL: foo
+    steps:
+      - uses: actions/checkout@v2
+      - name: Update local toolchain
+        run: |
+          rustup update
+      - name: Toolchain info
+        run: |
+          cargo --version --verbose
+          rustc --version
+      - name: Lint
+        run: |
+          cd server
+          cargo fmt -- --check
+          cargo clippy -- -D warnings
+      - name: Build
+        run: |
+          cd server
+          cargo build --release
