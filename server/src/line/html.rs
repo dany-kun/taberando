@@ -44,12 +44,11 @@ pub fn route(
 
                 if let Some(action) = action {
                     tokio::spawn(async move {
-                        sender.send((host, action)).await;
+                        let _ = sender.send((host, action)).await;
                     });
                 } else {
                     println!("Could not handle {:?} {:?}", source, body);
                 }
-                ()
             },
         )
         .untuple_one()
