@@ -68,9 +68,9 @@ pub(crate) fn map_jar_to_alias(jar_key: &str) -> gcp::firebase::Jar {
         .and_then(|json: HashMap<String, String>| {
             json.get(jar_key)
                 .map(|value| value.to_string())
-                .ok_or_else(|| JarError)
+                .ok_or(JarError)
         })
-        .unwrap_or(jar_key.to_string())
+        .unwrap_or_else(|_| jar_key.to_string())
 }
 
 #[cfg(not(debug_assertions))]

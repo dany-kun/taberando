@@ -18,6 +18,7 @@ pub(crate) type Jar = String;
 
 struct OAuth {
     token: String,
+    #[allow(dead_code)]
     project_id: String,
 }
 
@@ -140,7 +141,7 @@ impl FirebaseApi for Client {
             .await;
         // If not places [no entry in DB]; might return null as node is no longer existing;
         // default to empty map
-        result.map(|places| places.unwrap_or(HashMap::new()))
+        result.map(|places| places.unwrap_or_default())
     }
 }
 
@@ -173,7 +174,7 @@ async fn get_oauth_token() -> std::result::Result<OAuth, yup_oauth2::Error> {
         yup_oauth2::read_service_account_key(format!("{}/service_account.json", FOLDER_PATH))
             .await
             .map_err(|_| Error)
-            .or(std::env::var("GOOGLE_CREDENTIALS")
+            .or_else(|_| std::env::var("GOOGLE_CREDENTIALS")
                 .map_err(|_| Error)
                 .and_then(|json| yup_oauth2::parse_service_account_key(json).map_err(|_| Error)))
             .expect("Could not find service account file");
@@ -194,7 +195,7 @@ async fn get_oauth_token() -> std::result::Result<OAuth, yup_oauth2::Error> {
     let token = auth.token(scopes).await?;
     std::result::Result::Ok(OAuth {
         token: token.as_str().to_string(),
-        project_id: secret.clone().project_id.unwrap().to_string(),
+        project_id: secret.project_id.unwrap(),
     })
 }
 

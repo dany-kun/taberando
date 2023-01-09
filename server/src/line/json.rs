@@ -92,7 +92,7 @@ impl MessageContent {
 
     pub fn with_quick_replies(&mut self, replies: Vec<QuickReply>) -> MessageContent {
         self.quick_replies = Some(QuickReplyItems {
-            items: replies.clone(),
+            items: replies,
         });
         self.clone()
     }
@@ -116,6 +116,7 @@ impl MessageContent {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct RichMenu {
+    #[allow(dead_code)]
     #[serde(skip_serializing)]
     #[serde(rename(deserialize = "richMenuId"))]
     id: Option<String>,

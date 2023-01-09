@@ -18,6 +18,7 @@ struct Entry {
     time: String,
 }
 
+#[allow(opaque_hidden_inferred_bound)]
 pub fn route(
     sender: Sender<(String, Action)>,
 ) -> impl warp::Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone + Sync + Send {
@@ -71,7 +72,7 @@ fn to_action(source: &Source, body: &Entry) -> Option<Action> {
         }),
         _ => None,
     }
-    .map(|channel| Client::Line(channel));
+    .map(Client::Line);
 
     client.and_then(|c| {
         let meals = match body.time.as_str() {

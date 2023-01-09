@@ -18,6 +18,7 @@ async fn get_current_draw(
 }
 
 impl Client {
+    #[allow(dead_code)]
     fn quick_replies(&self, host: &str, draw: Option<String>) -> Vec<QuickReply> {
         match draw {
             None => self.default_quick_replies(host),
@@ -82,10 +83,10 @@ async fn delete_current<F: FnOnce(String) -> String>(
                 );
             }
             Some(draw) => {
-                firebase_client
+                let _ = firebase_client
                     .delete_place(&jar, Place { name: draw.clone() })
                     .await;
-                line_client
+                let _ = line_client
                     .send_to_all_users(
                         client,
                         MessageContent::text(&message_formatter(draw))
@@ -95,7 +96,7 @@ async fn delete_current<F: FnOnce(String) -> String>(
             }
         },
         Err(e) => {
-            line_client
+            let _ = line_client
                 .send_to_all_users(client, MessageContent::error_message(&e))
                 .await;
         }
@@ -119,13 +120,13 @@ impl LineClient {
                     MessageContent::text(&text_message)
                         .with_quick_replies(client.on_draw_quick_replies(host))
                 })
-                .unwrap_or(
-                    MessageContent::text(&text_message)
-                        .with_quick_replies(client.default_quick_replies(host)),
-                )
+                    .unwrap_or_else(||
+                                        MessageContent::text(&text_message)
+                                            .with_quick_replies(client.default_quick_replies(host)),
+                    )
             })
             .unwrap_or_else(|e| MessageContent::error_message(&e));
-        self.send_to_all_users(client.into(), message).await;
+        let _ = self.send_to_all_users(client, message).await;
     }
 
     async fn send_to_single_user(
@@ -144,7 +145,7 @@ impl LineClient {
         match to {
             None => {
                 println!("Could not send to a single user for {:?}", line);
-                HttpResult::Ok(Empty {})
+                Ok(Empty {})
             }
             Some(user_id) => self.send_to(user_id, message).await,
         }
@@ -173,7 +174,7 @@ impl Agent for LineClient {
             },
         };
         if let Some(id) = user_id {
-            self.send_to_single_user(client, MessageContent::text(&id))
+            let _ = self.send_to_single_user(client, MessageContent::text(id))
                 .await;
         }
     }
@@ -184,7 +185,7 @@ impl Agent for LineClient {
             None => "無予定".to_string(),
             Some(draw) => format!("予定中:{}", draw),
         })
-        .await;
+            .await;
     }
 
     async fn try_draw(
@@ -205,25 +206,25 @@ impl Agent for LineClient {
                                 MessageContent::text(&format!("「{}」が出ました", draw))
                                     .with_quick_replies(client.on_draw_quick_replies(host))
                             })
-                            .unwrap_or(
-                                MessageContent::text("何も出ませんでした")
-                                    .with_quick_replies(vec![client.add_place_quick_reply(host)]),
-                            )
+                                .unwrap_or_else(||
+                                    MessageContent::text("何も出ませんでした")
+                                        .with_quick_replies(vec![client.add_place_quick_reply(host)]),
+                                )
                         })
                         .unwrap_or_else(|e| MessageContent::error_message(&e));
-                    self.send_to_all_users(client.into(), message).await;
+                    let _ = self.send_to_all_users(client, message).await;
                 }
                 Some(draw) => {
-                    self.send_to_all_users(
-                        client.into(),
+                    let _ = self.send_to_all_users(
+                        client,
                         MessageContent::text(&format!("「{}」が既に出ています", draw))
                             .with_quick_replies(client.on_draw_quick_replies(host)),
                     )
-                    .await;
+                        .await;
                 }
             },
             Err(e) => {
-                self.send_to_all_users(client.into(), MessageContent::error_message(&e))
+                let _ = self.send_to_all_users(client, MessageContent::error_message(&e))
                     .await;
             }
         }
@@ -239,19 +240,19 @@ impl Agent for LineClient {
                     );
                 }
                 Some(draw) => {
-                    firebase_client
+                    let _ = firebase_client
                         .remove_drawn_place(&jar, Some(Place { name: draw.clone() }))
                         .await;
-                    self.send_to_all_users(
-                        client.into(),
+                    let _ = self.send_to_all_users(
+                        client,
                         MessageContent::text(&format!("{}を延期しました", &draw))
                             .with_quick_replies(client.default_quick_replies(host)),
                     )
-                    .await;
+                        .await;
                 }
             },
             Err(e) => {
-                self.send_to_all_users(client.into(), MessageContent::error_message(&e))
+                let _ = self.send_to_all_users(client, MessageContent::error_message(&e))
                     .await;
             }
         }
@@ -261,7 +262,7 @@ impl Agent for LineClient {
         delete_current(client, self, firebase_client, host, |draw| {
             format!("「{}」を削除しました", &draw)
         })
-        .await;
+            .await;
     }
 
     async fn archive_current(
@@ -273,7 +274,7 @@ impl Agent for LineClient {
         delete_current(client, self, firebase_client, host, |draw| {
             format!("「{}」は完食になりました", &draw)
         })
-        .await;
+            .await;
     }
 
     async fn add_place(
@@ -291,10 +292,10 @@ impl Agent for LineClient {
                 self.refresh(client, firebase_client, host, |_| {
                     "新しい店が追加されました".to_string()
                 })
-                .await;
+                    .await;
             }
             Err(e) => {
-                self.send_to_single_user(client, MessageContent::error_message(&e))
+                let _ = self.send_to_single_user(client, MessageContent::error_message(&e))
                     .await;
             }
         }

@@ -17,6 +17,8 @@ struct InvalidWebhookError;
 
 impl warp::reject::Reject for InvalidWebhookError {}
 
+
+#[allow(opaque_hidden_inferred_bound)]
 pub fn route(
     line_client: LineClient,
     tx: Sender<(String, Action)>,
@@ -74,7 +76,7 @@ pub fn route(
                     let actions = parse_webhook_events(client, json).await;
                     for action in actions {
                         println!("Send {:?}", action);
-                        tx.send((host.clone(), action)).await;
+                        let _ = tx.send((host.clone(), action)).await;
                     }
                 });
                 StatusCode::OK
@@ -103,7 +105,7 @@ async fn parse_webhook_events(line_client: LineClient, payload: Payload) -> Vec<
             Some(result) => vec.push(result),
         }
     }
-
+    #[allow(clippy::needless_return)]
     return vec;
 }
 
@@ -114,10 +116,10 @@ async fn action(
 ) -> Option<app::core::Action> {
     match event_type {
         "join" => {
-            bot::setup(&line_client, event.source).await;
+            let _ = bot::setup(line_client, event.source).await;
         }
         "follow" => {
-            bot::setup(&line_client, event.source).await;
+            let _ = bot::setup(line_client, event.source).await;
         }
         "message" => {
             let command = event
@@ -163,5 +165,6 @@ async fn action(
             println!("Unhandled event {}", event);
         }
     }
+    #[allow(clippy::needless_return)]
     return Option::None;
 }
