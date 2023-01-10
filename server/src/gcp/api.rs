@@ -1,9 +1,10 @@
 use std::collections::HashMap;
+use std::fmt::Formatter;
 
 use async_trait::async_trait;
 use rand::seq::IteratorRandom;
 use reqwest::Client;
-use serde::de::DeserializeOwned;
+use serde::de::{DeserializeOwned, Error, Visitor};
 
 use crate::app::core::{Meal, Place};
 use crate::gcp::constants::BASE_URL;
@@ -24,6 +25,59 @@ impl From<Meal> for &str {
 
 pub struct FirebaseApiV1 {
     client: reqwest::Client,
+}
+
+pub struct FirebaseApiV2 {
+    client: reqwest::Client,
+}
+
+#[derive(Debug, serde::Deserialize, serde::Serialize, Clone)]
+pub struct ApiV2Place {
+    name: String,
+    timeslot: Vec<Meal>,
+}
+
+impl serde::Serialize for Meal {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let serialized = match self {
+            Meal::Lunch => "昼",
+            Meal::Dinner => "夜",
+        };
+        serializer.serialize_str(serialized)
+    }
+}
+
+struct MealVisitor;
+
+impl<'de> Visitor<'de> for MealVisitor {
+    type Value = Meal;
+
+    fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+        write!(formatter, "A string representing a meal time slot")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        match v {
+            "昼" => Result::Ok(Meal::Lunch),
+            "夜" => Result::Ok(Meal::Dinner),
+            _ => Result::Err(E::custom(format!("Unknown meal value {}", v))),
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Meal {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(MealVisitor)
+    }
 }
 
 #[async_trait]
@@ -62,6 +116,53 @@ impl FirebaseApiV1 {
         O: Send,
     {
         self.client.make_json_request(to_request).await
+    }
+}
+
+#[async_trait]
+impl FirebaseApi for FirebaseApiV2 {
+    async fn get_current_draw(&self, _jar: &Jar) -> HttpResult<Option<String>> {
+        todo!()
+    }
+
+    async fn draw(&self, _jar: &Jar, _meal: Meal) -> HttpResult<Option<String>> {
+        todo!()
+    }
+
+    async fn add_place(&self, jar: &Jar, place: Place, meal: Vec<Meal>) -> HttpResult<Place> {
+        let place_name = &place.name;
+        let _: HashMap<String, String> = self
+            .client
+            .make_json_request(|client| {
+                client
+                    .put(self.firebase_url(jar, format!("places/{}", place_name).as_str()))
+                    .json::<ApiV2Place>(&ApiV2Place {
+                        name: place_name.clone(),
+                        timeslot: meal,
+                    })
+            })
+            .await?;
+        HttpResult::Ok(place)
+    }
+
+    async fn remove_drawn_place(&self, _jar: &Jar, _place: Option<Place>) -> HttpResult<()> {
+        todo!()
+    }
+
+    async fn delete_place(&self, _jar: &Jar, _place: Place) -> HttpResult<Place> {
+        todo!()
+    }
+
+    async fn get_list_of_places(
+        &self,
+        _jar: &Jar,
+        _meal: Meal,
+    ) -> HttpResult<HashMap<String, String>> {
+        todo!()
+    }
+
+    fn firebase_url(&self, jar: &Jar, path: &str) -> String {
+        format!("{}/v2/{}/{}.json", BASE_URL, jar, path)
     }
 }
 
