@@ -1,10 +1,5 @@
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::BufReader;
-
 use crate::app::agent::Agent;
 use crate::app::core::Client::Line;
-use crate::gcp;
 use crate::gcp::api::{FirebaseApi, Jar};
 use crate::line::http::{LineChannel, LineClient};
 
@@ -37,14 +32,13 @@ pub struct Place {
 
 impl From<&Client> for Jar {
     fn from(client: &Client) -> Self {
-        let id = match client {
+        match client {
             Line(channel) => match channel {
                 LineChannel::User(id) => format!("user_{}", id),
                 LineChannel::Room { id, .. } => format!("room_{}", id),
                 LineChannel::Group { id, .. } => format!("group_{}", id),
             },
-        };
-        map_jar_to_alias(&id)
+        }
     }
 }
 
@@ -60,31 +54,6 @@ impl From<serde_json::Error> for JarError {
     fn from(_: serde_json::Error) -> Self {
         JarError
     }
-}
-
-pub(crate) fn map_jar_to_alias(jar_key: &str) -> gcp::api::Jar {
-    // TODO improve this flow by better leveraging into/from traits
-    jar_to_alias_overrides()
-        .and_then(|json: HashMap<String, String>| {
-            json.get(jar_key)
-                .map(|value| value.to_string())
-                .ok_or(JarError)
-        })
-        .unwrap_or_else(|_| jar_key.to_string())
-}
-
-#[cfg(not(debug_assertions))]
-fn jar_to_alias_overrides() -> Result<HashMap<String, String>, JarError> {
-    option_env!("FIREBASE_JAR_OVERRIDES")
-        .ok_or(JarError)
-        .and_then(|env| serde_json::from_str(env).map_err(|_| JarError))
-}
-
-#[cfg(debug_assertions)]
-fn jar_to_alias_overrides() -> Result<HashMap<String, String>, JarError> {
-    File::open("./src/gcp/jars.json")
-        .map_err(|_| JarError)
-        .and_then(|file| serde_json::from_reader(BufReader::new(file)).map_err(|_| JarError))
 }
 
 pub async fn handle_action<T: FirebaseApi + Sync>(

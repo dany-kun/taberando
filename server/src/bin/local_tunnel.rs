@@ -18,7 +18,7 @@ fn main() {
 }
 
 fn open_local_url(port: i32, line_token: String) {
-    let child = Command::new("../ngrok")
+    let child = Command::new("ngrok")
         .arg("http")
         .arg(port.to_string())
         .arg("--log")
