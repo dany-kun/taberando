@@ -10,6 +10,7 @@ use crate::gcp::constants::BASE_URL;
 use crate::http::{HttpClient, HttpResult};
 
 const CURRENT_DRAW_PATH: &str = "pending_shop";
+const LABEL_PATH: &str = "label";
 
 pub(crate) type Jar = String;
 
@@ -28,6 +29,8 @@ pub struct FirebaseApiV1 {
 
 #[async_trait]
 pub trait FirebaseApi {
+    async fn add_label(&self, jar: &Jar, label: &str) -> HttpResult<String>;
+
     async fn get_current_draw(&self, jar: &Jar) -> HttpResult<Option<String>>;
 
     async fn draw(&self, jar: &Jar, meal: Meal) -> HttpResult<Option<String>>;
@@ -67,6 +70,13 @@ impl FirebaseApiV1 {
 
 #[async_trait]
 impl FirebaseApi for FirebaseApiV1 {
+    async fn add_label(&self, jar: &Jar, label: &str) -> HttpResult<String> {
+        let _ = self
+            .make_json_request(|client| client.put(self.firebase_url(jar, LABEL_PATH)).json(label))
+            .await?;
+        Ok(label.to_string())
+    }
+
     async fn get_current_draw(&self, jar: &Jar) -> HttpResult<Option<String>> {
         self.make_json_request(|client| client.get(self.firebase_url(jar, CURRENT_DRAW_PATH)))
             .await
