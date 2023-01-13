@@ -1,10 +1,5 @@
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::BufReader;
-
 use crate::app::agent::Agent;
 use crate::app::core::Client::Line;
-use crate::gcp;
 use crate::gcp::api::{FirebaseApi, Jar};
 use crate::line::http::{LineChannel, LineClient};
 
@@ -59,17 +54,6 @@ impl From<serde_json::Error> for JarError {
     fn from(_: serde_json::Error) -> Self {
         JarError
     }
-}
-
-pub(crate) fn map_jar_to_alias(jar_key: &str) -> gcp::api::Jar {
-    // TODO improve this flow by better leveraging into/from traits
-    jar_to_alias_overrides()
-        .and_then(|json: HashMap<String, String>| {
-            json.get(jar_key)
-                .map(|value| value.to_string())
-                .ok_or(JarError)
-        })
-        .unwrap_or_else(|_| jar_key.to_string())
 }
 
 pub async fn handle_action<T: FirebaseApi + Sync>(

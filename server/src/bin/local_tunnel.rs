@@ -1,6 +1,5 @@
 extern crate server;
 
-use std::fmt::format;
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 
