@@ -1,3 +1,4 @@
 src/public.url
 .idea
 target
+.env.json
