@@ -37,14 +37,13 @@ pub struct Place {
 
 impl From<&Client> for Jar {
     fn from(client: &Client) -> Self {
-        let id = match client {
+        match client {
             Line(channel) => match channel {
                 LineChannel::User(id) => format!("user_{}", id),
                 LineChannel::Room { id, .. } => format!("room_{}", id),
                 LineChannel::Group { id, .. } => format!("group_{}", id),
             },
-        };
-        map_jar_to_alias(&id)
+        }
     }
 }
 
@@ -71,20 +70,6 @@ pub(crate) fn map_jar_to_alias(jar_key: &str) -> gcp::firebase::Jar {
                 .ok_or_else(|| JarError)
         })
         .unwrap_or(jar_key.to_string())
-}
-
-#[cfg(not(debug_assertions))]
-fn jar_to_alias_overrides() -> Result<HashMap<String, String>, JarError> {
-    option_env!("FIREBASE_JAR_OVERRIDES")
-        .ok_or(JarError)
-        .and_then(|env| serde_json::from_str(env).map_err(|_| JarError))
-}
-
-#[cfg(debug_assertions)]
-fn jar_to_alias_overrides() -> Result<HashMap<String, String>, JarError> {
-    File::open("./src/gcp/jars.json")
-        .map_err(|_| JarError)
-        .and_then(|file| serde_json::from_reader(BufReader::new(file)).map_err(|_| JarError))
 }
 
 pub async fn handle_action(

@@ -11,6 +11,7 @@ use crate::http::{HttpClient, HttpResult};
 const BASE_URL: &str = env!("FIREBASE_URL");
 
 const CURRENT_DRAW_PATH: &str = "pending_shop";
+const LABEL_PATH: &str = "label";
 
 const FOLDER_PATH: &str = "./src/gcp";
 
@@ -32,6 +33,8 @@ impl From<Meal> for &str {
 
 #[async_trait]
 pub trait FirebaseApi {
+    async fn add_label(&self, jar: &Jar, label: &str) -> HttpResult<String>;
+
     async fn get_current_draw(&self, jar: &Jar) -> HttpResult<Option<String>>;
 
     async fn draw(&self, jar: &Jar, meal: Meal) -> HttpResult<Option<String>>;
@@ -55,6 +58,13 @@ pub trait FirebaseApi {
 
 #[async_trait]
 impl FirebaseApi for Client {
+    async fn add_label(&self, jar: &Jar, label: &str) -> HttpResult<String> {
+        let _ = self
+            .make_json_request(|client| client.put(self.firebase_url(jar, LABEL_PATH)).json(label))
+            .await?;
+        Ok(label.to_string())
+    }
+
     async fn get_current_draw(&self, jar: &Jar) -> HttpResult<Option<String>> {
         self.make_json_request(|client| client.get(self.firebase_url(jar, CURRENT_DRAW_PATH)))
             .await
