@@ -5,7 +5,7 @@ use std::io::BufReader;
 use crate::app::agent::Agent;
 use crate::app::core::Client::Line;
 use crate::gcp;
-use crate::gcp::firebase::Jar;
+use crate::gcp::api::{FirebaseApi, Jar};
 use crate::line::http::{LineChannel, LineClient};
 
 #[derive(Debug)]
@@ -61,21 +61,21 @@ impl From<serde_json::Error> for JarError {
     }
 }
 
-pub(crate) fn map_jar_to_alias(jar_key: &str) -> gcp::firebase::Jar {
+pub(crate) fn map_jar_to_alias(jar_key: &str) -> gcp::api::Jar {
     // TODO improve this flow by better leveraging into/from traits
     jar_to_alias_overrides()
         .and_then(|json: HashMap<String, String>| {
             json.get(jar_key)
                 .map(|value| value.to_string())
-                .ok_or_else(|| JarError)
+                .ok_or(JarError)
         })
-        .unwrap_or(jar_key.to_string())
+        .unwrap_or_else(|_| jar_key.to_string())
 }
 
-pub async fn handle_action(
+pub async fn handle_action<T: FirebaseApi + Sync>(
     action: (String, Action),
     line_client: &LineClient,
-    firebase_client: &reqwest::Client,
+    firebase_client: &T,
 ) {
     let (host, action) = action;
     match action {

@@ -2,25 +2,17 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use rand::seq::IteratorRandom;
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use reqwest::Client;
+use serde::de::DeserializeOwned;
 
 use crate::app::core::{Meal, Place};
+use crate::gcp::constants::BASE_URL;
 use crate::http::{HttpClient, HttpResult};
-
-const BASE_URL: &str = env!("FIREBASE_URL");
 
 const CURRENT_DRAW_PATH: &str = "pending_shop";
 const LABEL_PATH: &str = "label";
 
-const FOLDER_PATH: &str = "./src/gcp";
-
 pub(crate) type Jar = String;
-
-struct OAuth {
-    token: String,
-    project_id: String,
-}
 
 impl From<Meal> for &str {
     fn from(meal: Meal) -> Self {
@@ -29,6 +21,10 @@ impl From<Meal> for &str {
             Meal::Dinner => "夜だけ",
         }
     }
+}
+
+pub struct FirebaseApiV1 {
+    client: reqwest::Client,
 }
 
 #[async_trait]
@@ -56,8 +52,24 @@ pub trait FirebaseApi {
     }
 }
 
+impl FirebaseApiV1 {
+    pub fn new(client: reqwest::Client) -> FirebaseApiV1 {
+        FirebaseApiV1 { client }
+    }
+
+    async fn make_json_request<T: DeserializeOwned, O: FnOnce(&Client) -> reqwest::RequestBuilder>(
+        &self,
+        to_request: O,
+    ) -> HttpResult<T>
+    where
+        O: Send,
+    {
+        self.client.make_json_request(to_request).await
+    }
+}
+
 #[async_trait]
-impl FirebaseApi for Client {
+impl FirebaseApi for FirebaseApiV1 {
     async fn add_label(&self, jar: &Jar, label: &str) -> HttpResult<String> {
         let _ = self
             .make_json_request(|client| client.put(self.firebase_url(jar, LABEL_PATH)).json(label))
@@ -150,103 +162,6 @@ impl FirebaseApi for Client {
             .await;
         // If not places [no entry in DB]; might return null as node is no longer existing;
         // default to empty map
-        result.map(|places| places.unwrap_or(HashMap::new()))
-    }
-}
-
-pub async fn get_firebase_client() -> Client {
-    let oauth = get_oauth_token().await.unwrap();
-    let _ = env_logger::try_init();
-    let mut header_map = HeaderMap::new();
-
-    let authorization_header = &*format!("Bearer {}", oauth.token);
-    let mut auth_value = HeaderValue::from_str(authorization_header).unwrap();
-    auth_value.set_sensitive(true);
-    header_map.append(AUTHORIZATION, auth_value);
-
-    header_map.append(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-
-    Client::builder()
-        .default_headers(header_map)
-        .connection_verbose(true)
-        .build()
-        .unwrap()
-}
-
-#[derive(Debug)]
-struct Error;
-
-async fn get_oauth_token() -> std::result::Result<OAuth, yup_oauth2::Error> {
-    // Read application secret from a file. Sometimes it's easier to compile it directly into
-    // the binary. The clientsecret file contains JSON like `{"installed":{"client_id": ... }}`
-    let secret =
-        yup_oauth2::read_service_account_key(format!("{}/service_account.json", FOLDER_PATH))
-            .await
-            .map_err(|_| Error)
-            .or(std::env::var("GOOGLE_CREDENTIALS")
-                .map_err(|_| Error)
-                .and_then(|json| yup_oauth2::parse_service_account_key(json).map_err(|_| Error)))
-            .expect("Could not find service account file");
-
-    let auth = yup_oauth2::ServiceAccountAuthenticator::builder(secret.clone())
-        // .persist_tokens_to_disk(format!("{}/tokencache.json", FOLDER_PATH))
-        .build()
-        .await
-        .unwrap();
-
-    let scopes = &[
-        "https://www.googleapis.com/auth/userinfo.email",
-        "https://www.googleapis.com/auth/firebase.database",
-    ];
-
-    // token(<scopes>) is the one important function of this crate; it does everything to
-    // obtain a token that can be sent e.g. as Bearer token.
-    let token = auth.token(scopes).await?;
-    std::result::Result::Ok(OAuth {
-        token: token.as_str().to_string(),
-        project_id: secret.clone().project_id.unwrap().to_string(),
-    })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn it_draw_meal() {
-        let p = get_firebase_client().await.draw(Meal::Lunch).await;
-    }
-
-    #[tokio::test]
-    async fn it_postpones_meal() {
-        let p = get_firebase_client()
-            .await
-            .remove_drawn_place(Option::None)
-            .await;
-    }
-
-    #[tokio::test]
-    async fn it_adds_place() {
-        let p = get_firebase_client()
-            .await
-            .add_place(
-                Place {
-                    name: "test_name3".to_string(),
-                },
-                vec![Meal::Dinner, Meal::Lunch],
-            )
-            .await
-            .unwrap();
-    }
-
-    #[tokio::test]
-    async fn it_deletes_place() {
-        let p = get_firebase_client()
-            .await
-            .delete(Place {
-                name: "test_name2".to_string(),
-            })
-            .await
-            .unwrap();
+        result.map(|places| places.unwrap_or_default())
     }
 }

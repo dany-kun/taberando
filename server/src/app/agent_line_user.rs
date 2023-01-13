@@ -2,15 +2,15 @@ use async_trait::async_trait;
 
 use crate::app::agent::Agent;
 use crate::app::core::{Client, Meal, Place};
-use crate::gcp::firebase::{FirebaseApi, Jar};
+use crate::gcp::api::{FirebaseApi, Jar};
 use crate::http::{Empty, HttpResult};
 use crate::line::http::{LineChannel, LineClient};
 use crate::line::json;
 use crate::line::json::{MessageContent, QuickReply};
 
-async fn get_current_draw(
+async fn get_current_draw<T: FirebaseApi + Sync>(
     client: &Client,
-    firebase_client: &reqwest::Client,
+    firebase_client: &T,
 ) -> (Jar, HttpResult<Option<String>>) {
     let jar: Jar = client.into();
     let draw = firebase_client.get_current_draw(&jar).await;
@@ -18,6 +18,7 @@ async fn get_current_draw(
 }
 
 impl Client {
+    #[allow(dead_code)]
     fn quick_replies(&self, host: &str, draw: Option<String>) -> Vec<QuickReply> {
         match draw {
             None => self.default_quick_replies(host),
@@ -66,10 +67,10 @@ impl Client {
     }
 }
 
-async fn delete_current<F: FnOnce(String) -> String>(
+async fn delete_current<F: FnOnce(String) -> String, T: FirebaseApi + Sync>(
     client: &Client,
     line_client: &LineClient,
-    firebase_client: &reqwest::Client,
+    firebase_client: &T,
     host: &str,
     message_formatter: F,
 ) {
@@ -82,10 +83,10 @@ async fn delete_current<F: FnOnce(String) -> String>(
                 );
             }
             Some(draw) => {
-                firebase_client
+                let _ = firebase_client
                     .delete_place(&jar, Place { name: draw.clone() })
                     .await;
-                line_client
+                let _ = line_client
                     .send_to_all_users(
                         client,
                         MessageContent::text(&message_formatter(draw))
@@ -95,7 +96,7 @@ async fn delete_current<F: FnOnce(String) -> String>(
             }
         },
         Err(e) => {
-            line_client
+            let _ = line_client
                 .send_to_all_users(client, MessageContent::error_message(&e))
                 .await;
         }
@@ -103,10 +104,10 @@ async fn delete_current<F: FnOnce(String) -> String>(
 }
 
 impl LineClient {
-    async fn refresh<F: FnOnce(&Option<String>) -> String>(
+    async fn refresh<F: FnOnce(&Option<String>) -> String, T: FirebaseApi + Sync>(
         &self,
         client: &Client,
-        firebase_client: &reqwest::Client,
+        firebase_client: &T,
         host: &str,
         message: F,
     ) {
@@ -119,13 +120,13 @@ impl LineClient {
                     MessageContent::text(&text_message)
                         .with_quick_replies(client.on_draw_quick_replies(host))
                 })
-                .unwrap_or(
+                .unwrap_or_else(|| {
                     MessageContent::text(&text_message)
-                        .with_quick_replies(client.default_quick_replies(host)),
-                )
+                        .with_quick_replies(client.default_quick_replies(host))
+                })
             })
             .unwrap_or_else(|e| MessageContent::error_message(&e));
-        self.send_to_all_users(client.into(), message).await;
+        let _ = self.send_to_all_users(client, message).await;
     }
 
     async fn send_to_single_user(
@@ -144,7 +145,7 @@ impl LineClient {
         match to {
             None => {
                 println!("Could not send to a single user for {:?}", line);
-                HttpResult::Ok(Empty {})
+                Ok(Empty {})
             }
             Some(user_id) => self.send_to(user_id, message).await,
         }
@@ -173,12 +174,18 @@ impl Agent for LineClient {
             },
         };
         if let Some(id) = user_id {
-            self.send_to_single_user(client, MessageContent::text(&id))
+            let _ = self
+                .send_to_single_user(client, MessageContent::text(id))
                 .await;
         }
     }
 
-    async fn refresh(&self, client: &Client, firebase_client: &reqwest::Client, host: &str) {
+    async fn refresh<T: FirebaseApi + Sync>(
+        &self,
+        client: &Client,
+        firebase_client: &T,
+        host: &str,
+    ) {
         // Add count
         self.refresh(client, firebase_client, host, |draw| match draw {
             None => "無予定".to_string(),
@@ -187,11 +194,11 @@ impl Agent for LineClient {
         .await;
     }
 
-    async fn try_draw(
+    async fn try_draw<T: FirebaseApi + Sync>(
         &self,
         meal: Meal,
         client: &Client,
-        firebase_client: &reqwest::Client,
+        firebase_client: &T,
         host: &str,
     ) {
         let (jar, draw) = get_current_draw(client, firebase_client).await;
@@ -205,31 +212,38 @@ impl Agent for LineClient {
                                 MessageContent::text(&format!("「{}」が出ました", draw))
                                     .with_quick_replies(client.on_draw_quick_replies(host))
                             })
-                            .unwrap_or(
+                            .unwrap_or_else(|| {
                                 MessageContent::text("何も出ませんでした")
-                                    .with_quick_replies(vec![client.add_place_quick_reply(host)]),
-                            )
+                                    .with_quick_replies(vec![client.add_place_quick_reply(host)])
+                            })
                         })
                         .unwrap_or_else(|e| MessageContent::error_message(&e));
-                    self.send_to_all_users(client.into(), message).await;
+                    let _ = self.send_to_all_users(client, message).await;
                 }
                 Some(draw) => {
-                    self.send_to_all_users(
-                        client.into(),
-                        MessageContent::text(&format!("「{}」が既に出ています", draw))
-                            .with_quick_replies(client.on_draw_quick_replies(host)),
-                    )
-                    .await;
+                    let _ = self
+                        .send_to_all_users(
+                            client,
+                            MessageContent::text(&format!("「{}」が既に出ています", draw))
+                                .with_quick_replies(client.on_draw_quick_replies(host)),
+                        )
+                        .await;
                 }
             },
             Err(e) => {
-                self.send_to_all_users(client.into(), MessageContent::error_message(&e))
+                let _ = self
+                    .send_to_all_users(client, MessageContent::error_message(&e))
                     .await;
             }
         }
     }
 
-    async fn postpone(&self, client: &Client, firebase_client: &reqwest::Client, host: &str) {
+    async fn postpone<T: FirebaseApi + Sync>(
+        &self,
+        client: &Client,
+        firebase_client: &T,
+        host: &str,
+    ) {
         let (jar, draw) = get_current_draw(client, firebase_client).await;
         match draw {
             Ok(draw) => match draw {
@@ -239,35 +253,42 @@ impl Agent for LineClient {
                     );
                 }
                 Some(draw) => {
-                    firebase_client
+                    let _ = firebase_client
                         .remove_drawn_place(&jar, Some(Place { name: draw.clone() }))
                         .await;
-                    self.send_to_all_users(
-                        client.into(),
-                        MessageContent::text(&format!("{}を延期しました", &draw))
-                            .with_quick_replies(client.default_quick_replies(host)),
-                    )
-                    .await;
+                    let _ = self
+                        .send_to_all_users(
+                            client,
+                            MessageContent::text(&format!("{}を延期しました", &draw))
+                                .with_quick_replies(client.default_quick_replies(host)),
+                        )
+                        .await;
                 }
             },
             Err(e) => {
-                self.send_to_all_users(client.into(), MessageContent::error_message(&e))
+                let _ = self
+                    .send_to_all_users(client, MessageContent::error_message(&e))
                     .await;
             }
         }
     }
 
-    async fn delete_current(&self, client: &Client, firebase_client: &reqwest::Client, host: &str) {
+    async fn delete_current<T: FirebaseApi + Sync>(
+        &self,
+        client: &Client,
+        firebase_client: &T,
+        host: &str,
+    ) {
         delete_current(client, self, firebase_client, host, |draw| {
             format!("「{}」を削除しました", &draw)
         })
         .await;
     }
 
-    async fn archive_current(
+    async fn archive_current<T: FirebaseApi + Sync>(
         &self,
         client: &Client,
-        firebase_client: &reqwest::Client,
+        firebase_client: &T,
         host: &str,
     ) {
         delete_current(client, self, firebase_client, host, |draw| {
@@ -276,10 +297,10 @@ impl Agent for LineClient {
         .await;
     }
 
-    async fn add_place(
+    async fn add_place<T: FirebaseApi + Sync>(
         &self,
         client: &Client,
-        firebase_client: &reqwest::Client,
+        firebase_client: &T,
         place: Place,
         meals: Vec<Meal>,
         host: &str,
@@ -294,7 +315,8 @@ impl Agent for LineClient {
                 .await;
             }
             Err(e) => {
-                self.send_to_single_user(client, MessageContent::error_message(&e))
+                let _ = self
+                    .send_to_single_user(client, MessageContent::error_message(&e))
                     .await;
             }
         }

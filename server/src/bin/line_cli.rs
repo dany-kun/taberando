@@ -53,77 +53,74 @@ async fn main() {
         .subcommand(menu_app)
         .get_matches();
 
-    match matches.subcommand() {
-        Some(("menu", cmd_matches)) => {
-            if let Some((action, m)) = cmd_matches.subcommand() {
-                let command: CommandAction =
-                    serde_json::from_str(format!("{}{}{}", '"', action, '"').as_str()).unwrap();
-                match command {
-                    CommandAction::List => {
-                        let result = get_http_client(m).get_rich_menus().await.unwrap();
-                        println!("{:?}", result)
-                    }
-                    CommandAction::Delete => {
-                        let menu_id = m.value_of("id").unwrap();
-                        get_http_client(m).delete_rich_menu(menu_id).await.unwrap();
-                        println!("Menu {} deleted", menu_id)
-                    }
+    if let Some(("menu", cmd_matches)) = matches.subcommand() {
+        if let Some((action, m)) = cmd_matches.subcommand() {
+            let command: CommandAction =
+                serde_json::from_str(format!("{}{}{}", '"', action, '"').as_str()).unwrap();
+            match command {
+                CommandAction::List => {
+                    let result = get_http_client(m).get_rich_menus().await.unwrap();
+                    println!("{:?}", result)
+                }
+                CommandAction::Delete => {
+                    let menu_id = m.value_of("id").unwrap();
+                    get_http_client(m).delete_rich_menu(menu_id).await.unwrap();
+                    println!("Menu {} deleted", menu_id)
+                }
 
-                    CommandAction::Create => {
-                        let json_path = m.value_of("json").unwrap();
-                        let image_path = m.value_of("image").unwrap();
-                        let content = std::fs::read_to_string(json_path).unwrap();
-                        let menu = serde_json::from_str::<RichMenu>(&content).unwrap();
-                        let image = std::fs::read(image_path).unwrap();
-                        let client = get_http_client(m);
-                        let result = client.create_rich_menu(&menu, image).await.unwrap();
-                        println!("Created menu {:?}", result);
-                    }
+                CommandAction::Create => {
+                    let json_path = m.value_of("json").unwrap();
+                    let image_path = m.value_of("image").unwrap();
+                    let content = std::fs::read_to_string(json_path).unwrap();
+                    let menu = serde_json::from_str::<RichMenu>(&content).unwrap();
+                    let image = std::fs::read(image_path).unwrap();
+                    let client = get_http_client(m);
+                    let result = client.create_rich_menu(&menu, image).await.unwrap();
+                    println!("Created menu {:?}", result);
+                }
 
-                    CommandAction::Default => {
-                        let result = get_http_client(m)
-                            .get_default_menu(m.value_of("id"))
-                            .await
-                            .unwrap();
-                        println!("{}", result)
-                    }
+                CommandAction::Default => {
+                    let result = get_http_client(m)
+                        .get_default_menu(m.value_of("id"))
+                        .await
+                        .unwrap();
+                    println!("{}", result)
+                }
 
-                    CommandAction::SetDefault => {
-                        let menu_id = m.value_of("menu").unwrap();
-                        let user_id = m.value_of("id");
-                        get_http_client(m)
-                            .set_rich_menu(menu_id, user_id)
-                            .await
-                            .unwrap();
-                        println!(
-                            "Menu {} set for {}",
-                            menu_id,
-                            user_id
-                                .map(|user_id| format!("user {}", user_id))
-                                .unwrap_or("default".to_string())
-                        )
-                    }
+                CommandAction::SetDefault => {
+                    let menu_id = m.value_of("menu").unwrap();
+                    let user_id = m.value_of("id");
+                    get_http_client(m)
+                        .set_rich_menu(menu_id, user_id)
+                        .await
+                        .unwrap();
+                    println!(
+                        "Menu {} set for {}",
+                        menu_id,
+                        user_id
+                            .map(|user_id| format!("user {}", user_id))
+                            .unwrap_or_else(|| "default".to_string())
+                    )
+                }
 
-                    CommandAction::SetAlias => {
-                        let menu_id = m.value_of("menu").unwrap();
-                        let alias = m.value_of("alias").unwrap();
-                        get_http_client(m)
-                            .set_rich_menu_alias(menu_id, alias)
-                            .await
-                            .unwrap();
-                        println!("Menu alias {} set for menu {}", alias, menu_id)
-                    }
+                CommandAction::SetAlias => {
+                    let menu_id = m.value_of("menu").unwrap();
+                    let alias = m.value_of("alias").unwrap();
+                    get_http_client(m)
+                        .set_rich_menu_alias(menu_id, alias)
+                        .await
+                        .unwrap();
+                    println!("Menu alias {} set for menu {}", alias, menu_id)
                 }
             }
         }
-        _ => {}
     }
 }
 
 fn get_http_client(m: &ArgMatches) -> LineClient {
     let token = m
         .value_of_t("line-token")
-        .or(std::env::var("LINE_TOKEN"))
+        .or_else(|_| std::env::var("LINE_TOKEN"))
         .expect("Please specify a line token");
     http::get_line_client(token)
 }

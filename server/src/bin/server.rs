@@ -3,6 +3,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use warp::Filter;
 
 use server::app::core::Action;
+use server::gcp::api::{FirebaseApi, FirebaseApiV1};
 use server::{app, gcp, line};
 
 #[tokio::main]
@@ -14,13 +15,14 @@ async fn main() {
         .unwrap_or(4001);
     let line_token = std::env::var("LINE_TOKEN").expect("Please specify a LINE_TOKEN env variable");
     let line_client = line::http::get_line_client(line_token);
-    let firebase_client = gcp::firebase::get_firebase_client().await;
+    let firebase_client = gcp::client::get_firebase_client().await;
 
     let (tx, rx) = mpsc::channel(32);
 
-    tokio::try_join!(
+    let fc = FirebaseApiV1::new(firebase_client);
+    let _ = tokio::try_join!(
         launch_server(port, &line_client, tx),
-        launch_core_agent(rx, &line_client, &firebase_client)
+        launch_core_agent(rx, &line_client, &fc)
     );
 }
 
@@ -39,10 +41,10 @@ async fn launch_server(
     Result::Ok(())
 }
 
-async fn launch_core_agent(
+async fn launch_core_agent<T: FirebaseApi + Sync>(
     mut rx: Receiver<(String, Action)>,
     line_client: &line::http::LineClient,
-    firebase_client: &reqwest::Client,
+    firebase_client: &T,
 ) -> Result<(), &'static str> {
     println!("Receiving");
     while let Some(action) = rx.recv().await {
