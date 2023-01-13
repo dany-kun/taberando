@@ -128,7 +128,7 @@ async fn action(
                 .to_lowercase();
 
             return if let Some(c) = event.source.to_client() {
-                match command.as_str() {
+                match command.trim().to_lowercase().as_str() {
                     "refresh" => Some(app::core::Action::Refresh(c)),
                     "whoami" => Some(app::core::Action::WhoAmI(c)),
                     _ => None,
@@ -136,7 +136,6 @@ async fn action(
             } else {
                 None
             };
-            // bot::setup(&http_client, event.source).await;
         }
         "postback" => {
             if let Some(postback) = event.postback {
