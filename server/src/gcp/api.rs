@@ -112,12 +112,6 @@ pub trait FirebaseApi {
 
     async fn delete_place(&self, jar: &Jar, place: Place) -> HttpResult<Place>;
 
-    async fn get_list_of_places(
-        &self,
-        jar: &Jar,
-        meal: Meal,
-    ) -> HttpResult<HashMap<String, String>>;
-
     fn firebase_url(&self, jar: &Jar, path: &str) -> String {
         format!("{}/{}/{}.json", BASE_URL, jar, path)
     }
@@ -132,6 +126,19 @@ impl FirebaseApiV1 {
         O: Send,
     {
         self.client.make_json_request(to_request).await
+    }
+
+    async fn get_list_of_places(
+        &self,
+        jar: &Jar,
+        meal: Meal,
+    ) -> HttpResult<HashMap<String, String>> {
+        let result: HttpResult<Option<HashMap<String, String>>> = self
+            .make_json_request(|client| client.get(self.firebase_url(jar, meal.into())))
+            .await;
+        // If not places [no entry in DB]; might return null as node is no longer existing;
+        // default to empty map
+        result.map(|places| places.unwrap_or_default())
     }
 }
 
@@ -179,14 +186,6 @@ impl FirebaseApi for FirebaseApiComposite {
         todo!()
     }
 
-    async fn get_list_of_places(
-        &self,
-        _jar: &Jar,
-        _meal: Meal,
-    ) -> HttpResult<HashMap<String, String>> {
-        todo!()
-    }
-
     fn firebase_url(&self, _jar: &Jar, _path: &str) -> String {
         panic!("No firebase url to define on composite api")
     }
@@ -194,8 +193,12 @@ impl FirebaseApi for FirebaseApiComposite {
 
 #[async_trait]
 impl FirebaseApi for FirebaseApiV2 {
-    async fn add_label(&self, _jar: &Jar, _label: &str) -> HttpResult<String> {
-        todo!()
+    async fn add_label(&self, jar: &Jar, label: &str) -> HttpResult<String> {
+        let _ = self
+            .client
+            .make_json_request(|client| client.put(self.firebase_url(jar, LABEL_PATH)).json(label))
+            .await?;
+        Ok(label.to_string())
     }
 
     async fn get_current_draw(&self, jar: &Jar) -> HttpResult<Option<String>> {
@@ -229,14 +232,6 @@ impl FirebaseApi for FirebaseApiV2 {
     }
 
     async fn delete_place(&self, _jar: &Jar, _place: Place) -> HttpResult<Place> {
-        todo!()
-    }
-
-    async fn get_list_of_places(
-        &self,
-        _jar: &Jar,
-        _meal: Meal,
-    ) -> HttpResult<HashMap<String, String>> {
         todo!()
     }
 
@@ -327,18 +322,5 @@ impl FirebaseApi for FirebaseApiV1 {
         }
         self.remove_drawn_place(jar, Some(place.clone())).await?;
         HttpResult::Ok(place)
-    }
-
-    async fn get_list_of_places(
-        &self,
-        jar: &Jar,
-        meal: Meal,
-    ) -> HttpResult<HashMap<String, String>> {
-        let result: HttpResult<Option<HashMap<String, String>>> = self
-            .make_json_request(|client| client.get(self.firebase_url(jar, meal.into())))
-            .await;
-        // If not places [no entry in DB]; might return null as node is no longer existing;
-        // default to empty map
-        result.map(|places| places.unwrap_or_default())
     }
 }
