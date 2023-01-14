@@ -1183,6 +1183,7 @@ dependencies = [
  "base64",
  "clap",
  "env_logger",
+ "futures",
  "log",
  "rand",
  "regex",
