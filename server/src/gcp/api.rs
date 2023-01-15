@@ -13,6 +13,7 @@ use crate::http::{ApiError, HttpClient, HttpResult};
 const CURRENT_DRAW_PATH: &str = "pending_shop";
 const FIREBASE_API_V2_CURRENT_DRAW_KEY: &str = "current_draw";
 const FIREBASE_API_V2_PLACES_KEY: &str = "places";
+const FIREBASE_API_V2_PLACE_NAME_TABLE: &str = "place_id_name";
 const LABEL_PATH: &str = "label";
 
 pub(crate) type Jar = String;
@@ -144,6 +145,12 @@ impl FirebaseApiV1 {
     }
 }
 
+#[derive(Debug, serde::Deserialize, Clone)]
+struct AppendedKey {
+    #[serde(rename(deserialize = "name"))]
+    key: String,
+}
+
 #[async_trait]
 impl FirebaseApi for FirebaseApiComposite {
     async fn add_label(&self, jar: &Jar, label: &str) -> HttpResult<String> {
@@ -214,9 +221,28 @@ impl FirebaseApi for FirebaseApiV2 {
     }
 
     async fn get_current_draw(&self, jar: &Jar) -> HttpResult<Option<String>> {
-        self.client
+        // Get the current draw key
+        let key: Option<String> = self
+            .client
             .make_json_request(|client| client.get(self.firebase_url(jar, "current_draw")))
-            .await
+            .await?;
+        // Get the current draw name from the key
+        let place = match key {
+            Some(key) => {
+                let place: String = self
+                    .client
+                    .make_json_request(|client| {
+                        client.get(self.firebase_url(
+                            jar,
+                            format!("{}/{}", FIREBASE_API_V2_PLACE_NAME_TABLE, key).as_str(),
+                        ))
+                    })
+                    .await?;
+                Some(place)
+            }
+            None => None,
+        };
+        Ok(place)
     }
 
     async fn draw(&self, _jar: &Jar, _meal: Meal) -> HttpResult<Option<String>> {
@@ -225,7 +251,7 @@ impl FirebaseApi for FirebaseApiV2 {
 
     async fn add_place(&self, jar: &Jar, place: Place, meal: Vec<Meal>) -> HttpResult<Place> {
         let place_name = &place.name;
-        let _: serde_json::Value = self
+        let response: AppendedKey = self
             .client
             .make_json_request(|client| {
                 client
@@ -236,54 +262,64 @@ impl FirebaseApi for FirebaseApiV2 {
                     })
             })
             .await?;
-        HttpResult::Ok(place)
+
+        // Store the generated key to some indexing table
+        // Should be done in a transaction + need monitoring..if this fails we corrupt our DB data...
+        let added_place_key = response.key;
+        self.client
+            .make_json_request(|client| {
+                client
+                    .put(
+                        self.firebase_url(
+                            jar,
+                            format!("{}/{}", FIREBASE_API_V2_PLACE_NAME_TABLE, &added_place_key)
+                                .as_str(),
+                        ),
+                    )
+                    .json(place_name)
+            })
+            .await?;
+
+        HttpResult::Ok(Place {
+            name: added_place_key,
+        })
     }
 
-    async fn remove_drawn_place(&self, jar: &Jar, place: Option<Place>) -> HttpResult<()> {
-        let remove_current = self.client.make_json_request(|client| {
-            client.delete(self.firebase_url(jar, FIREBASE_API_V2_CURRENT_DRAW_KEY))
-        });
-        match place {
-            None => remove_current.await?,
-            Some(place) => {
-                if let Some(drawn_place) = self.get_current_draw(jar).await? {
-                    if place.name == drawn_place {
-                        remove_current.await?;
-                    }
-                }
-            }
+    async fn remove_drawn_place(&self, jar: &Jar, _place: Option<Place>) -> HttpResult<()> {
+        // TODO use the passed parameter
+        if let Some(_drawn_place) = self.get_current_draw(jar).await? {
+            self.client
+                .make_json_request(|client| {
+                    client.delete(self.firebase_url(jar, FIREBASE_API_V2_CURRENT_DRAW_KEY))
+                })
+                .await?;
         }
         HttpResult::Ok(())
     }
 
     // https://firebase.google.com/docs/database/rest/save-data#section-conditional-requests
     async fn delete_place(&self, jar: &Jar, place: Place) -> HttpResult<Place> {
-        let e_tag_response = self
-            .client
-            .make_request(|client| {
-                client
-                    .get(self.firebase_url(
-                        jar,
-                        format!("{}/{}", FIREBASE_API_V2_PLACES_KEY, place.name).as_str(),
-                    ))
-                    .header("X-Firebase-ETag", "true")
-            })
-            .await?;
-        let e_tag = e_tag_response.headers()["ETag"]
-            .to_str()
-            .map_err(|_| ApiError::Unknown {
-                message: "Could  not get E-Tag from headers".to_string(),
-            })?;
+        let place_name = &place.name;
         self.client
             .make_request(|client| {
-                client
-                    .delete(self.firebase_url(jar, FIREBASE_API_V2_PLACES_KEY))
-                    .header("if-match", e_tag)
+                client.delete(self.firebase_url(
+                    jar,
+                    format!("{}/{}", FIREBASE_API_V2_PLACES_KEY, place_name).as_str(),
+                ))
             })
             .await?;
+        let _: HttpResult<serde_json::Value> = self
+            .client
+            .make_json_request(|client| {
+                client.delete(self.firebase_url(
+                    jar,
+                    format!("{}/{}", FIREBASE_API_V2_PLACE_NAME_TABLE, place_name).as_str(),
+                ))
+            })
+            .await;
 
         self.remove_drawn_place(jar, Some(place.clone())).await?;
-        HttpResult::Ok(place)
+        HttpResult::Ok(place.clone())
     }
 
     fn firebase_url(&self, jar: &Jar, path: &str) -> String {
