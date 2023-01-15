@@ -162,17 +162,8 @@ impl FirebaseApi for FirebaseApiComposite {
     }
 
     async fn get_current_draw(&self, jar: &Jar) -> HttpResult<Option<String>> {
-        let apis = self.apis.iter();
-        let result: Vec<Option<String>> =
-            futures::future::try_join_all(apis.map(|api| api.get_current_draw(jar))).await?;
-        // Check if all elements equal
-        if result.windows(2).all(|v| v[0] == v[1]) {
-            Ok(result.first().unwrap().clone())
-        } else {
-            Err(ApiError::Unknown {
-                message: "Different current draws".to_string(),
-            })
-        }
+        let api = self.apis.first().unwrap();
+        api.get_current_draw(jar).await
     }
 
     async fn draw(&self, jar: &Jar, meal: Meal) -> HttpResult<Option<String>> {
@@ -266,7 +257,8 @@ impl FirebaseApi for FirebaseApiV2 {
         // Store the generated key to some indexing table
         // Should be done in a transaction + need monitoring..if this fails we corrupt our DB data...
         let added_place_key = response.key;
-        self.client
+        let _place_name = self
+            .client
             .make_json_request(|client| {
                 client
                     .put(
