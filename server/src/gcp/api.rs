@@ -8,7 +8,7 @@ use serde::de::{DeserializeOwned, Error, Visitor};
 
 use crate::app::core::{Meal, Place};
 use crate::gcp::constants::BASE_URL;
-use crate::http::{ApiError, HttpClient, HttpResult};
+use crate::http::{HttpClient, HttpResult};
 
 const CURRENT_DRAW_PATH: &str = "pending_shop";
 const FIREBASE_API_V2_CURRENT_DRAW_KEY: &str = "current_draw";
