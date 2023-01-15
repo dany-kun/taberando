@@ -27,6 +27,7 @@ pub enum Meal {
 
 #[derive(Debug, Clone)]
 pub struct Place {
+    // Rename this to Key after migration to v2
     pub name: String,
 }
 
