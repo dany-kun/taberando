@@ -229,10 +229,7 @@ impl FirebaseApi for FirebaseApiV2 {
             .client
             .make_json_request(|client| {
                 client
-                    .post(self.firebase_url(
-                        jar,
-                        format!("{}/{}", FIREBASE_API_V2_PLACES_KEY, place_name).as_str(),
-                    ))
+                    .post(self.firebase_url(jar, FIREBASE_API_V2_PLACES_KEY))
                     .json::<ApiV2Place>(&ApiV2Place {
                         name: place_name.clone(),
                         timeslot: meal,
