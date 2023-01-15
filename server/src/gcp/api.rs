@@ -43,10 +43,10 @@ impl FirebaseApiComposite {
     pub fn new(client: reqwest::Client) -> FirebaseApiComposite {
         FirebaseApiComposite {
             apis: vec![
-                Box::new(FirebaseApiV1 {
+                Box::new(FirebaseApiV2 {
                     client: client.clone(),
                 }),
-                Box::new(FirebaseApiV2 { client }),
+                Box::new(FirebaseApiV1 { client }),
             ],
         }
     }
