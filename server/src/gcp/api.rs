@@ -11,6 +11,8 @@ use crate::gcp::constants::BASE_URL;
 use crate::http::{ApiError, HttpClient, HttpResult};
 
 const CURRENT_DRAW_PATH: &str = "pending_shop";
+const FIREBASE_API_V2_CURRENT_DRAW_KEY: &str = "current_draw";
+const FIREBASE_API_V2_PLACES_KEY: &str = "places";
 const LABEL_PATH: &str = "label";
 
 pub(crate) type Jar = String;
@@ -166,8 +168,10 @@ impl FirebaseApi for FirebaseApiComposite {
         }
     }
 
-    async fn draw(&self, _jar: &Jar, _meal: Meal) -> HttpResult<Option<String>> {
-        todo!()
+    async fn draw(&self, jar: &Jar, meal: Meal) -> HttpResult<Option<String>> {
+        // Just change state on the first API
+        let api = self.apis.first().unwrap();
+        api.draw(jar, meal).await
     }
 
     async fn add_place(&self, jar: &Jar, place: Place, meal: Vec<Meal>) -> HttpResult<Place> {
@@ -178,12 +182,20 @@ impl FirebaseApi for FirebaseApiComposite {
         Ok(place)
     }
 
-    async fn remove_drawn_place(&self, _jar: &Jar, _place: Option<Place>) -> HttpResult<()> {
-        todo!()
+    async fn remove_drawn_place(&self, jar: &Jar, place: Option<Place>) -> HttpResult<()> {
+        let apis = self.apis.iter();
+        for api in apis {
+            api.remove_drawn_place(jar, place.clone()).await?;
+        }
+        Ok(())
     }
 
-    async fn delete_place(&self, _jar: &Jar, _place: Place) -> HttpResult<Place> {
-        todo!()
+    async fn delete_place(&self, jar: &Jar, place: Place) -> HttpResult<Place> {
+        let apis = self.apis.iter();
+        for api in apis {
+            api.delete_place(jar, place.clone()).await?;
+        }
+        Ok(place)
     }
 
     fn firebase_url(&self, _jar: &Jar, _path: &str) -> String {
@@ -213,11 +225,14 @@ impl FirebaseApi for FirebaseApiV2 {
 
     async fn add_place(&self, jar: &Jar, place: Place, meal: Vec<Meal>) -> HttpResult<Place> {
         let place_name = &place.name;
-        let _: HashMap<String, String> = self
+        let _: serde_json::Value = self
             .client
             .make_json_request(|client| {
                 client
-                    .put(self.firebase_url(jar, format!("places/{}", place_name).as_str()))
+                    .post(self.firebase_url(
+                        jar,
+                        format!("{}/{}", FIREBASE_API_V2_PLACES_KEY, place_name).as_str(),
+                    ))
                     .json::<ApiV2Place>(&ApiV2Place {
                         name: place_name.clone(),
                         timeslot: meal,
@@ -227,12 +242,51 @@ impl FirebaseApi for FirebaseApiV2 {
         HttpResult::Ok(place)
     }
 
-    async fn remove_drawn_place(&self, _jar: &Jar, _place: Option<Place>) -> HttpResult<()> {
-        todo!()
+    async fn remove_drawn_place(&self, jar: &Jar, place: Option<Place>) -> HttpResult<()> {
+        let remove_current = self.client.make_json_request(|client| {
+            client.delete(self.firebase_url(jar, FIREBASE_API_V2_CURRENT_DRAW_KEY))
+        });
+        match place {
+            None => remove_current.await?,
+            Some(place) => {
+                if let Some(drawn_place) = self.get_current_draw(jar).await? {
+                    if place.name == drawn_place {
+                        remove_current.await?;
+                    }
+                }
+            }
+        }
+        HttpResult::Ok(())
     }
 
-    async fn delete_place(&self, _jar: &Jar, _place: Place) -> HttpResult<Place> {
-        todo!()
+    // https://firebase.google.com/docs/database/rest/save-data#section-conditional-requests
+    async fn delete_place(&self, jar: &Jar, place: Place) -> HttpResult<Place> {
+        let e_tag_response = self
+            .client
+            .make_request(|client| {
+                client
+                    .get(self.firebase_url(
+                        jar,
+                        format!("{}/{}", FIREBASE_API_V2_PLACES_KEY, place.name).as_str(),
+                    ))
+                    .header("X-Firebase-ETag", "true")
+            })
+            .await?;
+        let e_tag = e_tag_response.headers()["ETag"]
+            .to_str()
+            .map_err(|_| ApiError::Unknown {
+                message: "Could  not get E-Tag from headers".to_string(),
+            })?;
+        self.client
+            .make_request(|client| {
+                client
+                    .delete(self.firebase_url(jar, FIREBASE_API_V2_PLACES_KEY))
+                    .header("if-match", e_tag)
+            })
+            .await?;
+
+        self.remove_drawn_place(jar, Some(place.clone())).await?;
+        HttpResult::Ok(place)
     }
 
     fn firebase_url(&self, jar: &Jar, path: &str) -> String {

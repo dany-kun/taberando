@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use reqwest::Client;
+use reqwest::{Client, Response};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 
@@ -21,12 +21,26 @@ pub trait HttpClient {
     type Request;
     type Client;
 
+    async fn make_request<O: FnOnce(&Self::Client) -> Self::Request>(
+        &self,
+        to_request: O,
+    ) -> HttpResult<Response>
+    where
+        O: Send;
+
     async fn make_json_request<T: DeserializeOwned, O: FnOnce(&Self::Client) -> Self::Request>(
         &self,
         to_request: O,
     ) -> HttpResult<T>
     where
-        O: Send;
+        O: Send,
+    {
+        self.make_request(to_request)
+            .await?
+            .json()
+            .await
+            .map_err(|e| ApiError::JsonParsing { error: e })
+    }
 }
 
 #[async_trait]
@@ -34,10 +48,10 @@ impl HttpClient for Client {
     type Request = reqwest::RequestBuilder;
     type Client = reqwest::Client;
 
-    async fn make_json_request<T: DeserializeOwned, O: FnOnce(&Client) -> Self::Request>(
+    async fn make_request<O: FnOnce(&Client) -> Self::Request>(
         &self,
         to_request: O,
-    ) -> HttpResult<T>
+    ) -> HttpResult<Response>
     where
         O: Send,
     {
@@ -47,10 +61,7 @@ impl HttpClient for Client {
             .map_err(|e| ApiError::Network { error: e })?;
 
         match response.error_for_status_ref() {
-            Ok(_) => response
-                .json()
-                .await
-                .map_err(|e| ApiError::JsonParsing { error: e }),
+            Ok(_res) => Ok(response),
             Err(e) => {
                 let message = response.text().await.map_err(|e| ApiError::Unknown {
                     message: format!("Could not decode response, got {:?}", e),
