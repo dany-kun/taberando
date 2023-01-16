@@ -1,16 +1,13 @@
-use std::collections::HashMap;
 use std::fmt::Formatter;
 
 use async_trait::async_trait;
 use rand::seq::IteratorRandom;
-use reqwest::Client;
-use serde::de::{DeserializeOwned, Error, Visitor};
+use serde::de::{Error, Visitor};
 
 use crate::app::core::{Meal, Place};
 use crate::gcp::constants::BASE_URL;
 use crate::http::{HttpClient, HttpResult};
 
-const CURRENT_DRAW_PATH: &str = "pending_shop";
 const FIREBASE_API_V2_CURRENT_DRAW_KEY: &str = "current_draw";
 const FIREBASE_API_V2_PLACES_KEY: &str = "places";
 const FIREBASE_API_V2_SLOTS_KEY: &str = "timeslots";
@@ -28,29 +25,8 @@ impl From<Meal> for &str {
     }
 }
 
-pub struct FirebaseApiV1 {
-    client: reqwest::Client,
-}
-
 pub struct FirebaseApiV2 {
     client: reqwest::Client,
-}
-
-pub struct FirebaseApiComposite {
-    apis: Vec<Box<dyn FirebaseApi + Sync>>,
-}
-
-impl FirebaseApiComposite {
-    pub fn new(client: reqwest::Client) -> FirebaseApiComposite {
-        FirebaseApiComposite {
-            apis: vec![
-                Box::new(FirebaseApiV2 {
-                    client: client.clone(),
-                }),
-                Box::new(FirebaseApiV1 { client }),
-            ],
-        }
-    }
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize, Clone)]
@@ -126,85 +102,10 @@ pub trait FirebaseApi {
     }
 }
 
-impl FirebaseApiV1 {
-    async fn make_json_request<T: DeserializeOwned, O: FnOnce(&Client) -> reqwest::RequestBuilder>(
-        &self,
-        to_request: O,
-    ) -> HttpResult<T>
-    where
-        O: Send,
-    {
-        self.client.make_json_request(to_request).await
-    }
-
-    async fn get_list_of_places(
-        &self,
-        jar: &Jar,
-        meal: Meal,
-    ) -> HttpResult<HashMap<String, String>> {
-        let result: HttpResult<Option<HashMap<String, String>>> = self
-            .make_json_request(|client| client.get(self.firebase_url(jar, meal.into())))
-            .await;
-        // If not places [no entry in DB]; might return null as node is no longer existing;
-        // default to empty map
-        result.map(|places| places.unwrap_or_default())
-    }
-}
-
 #[derive(Debug, serde::Deserialize, Clone)]
 struct AppendedKey {
     #[serde(rename(deserialize = "name"))]
     key: String,
-}
-
-#[async_trait]
-impl FirebaseApi for FirebaseApiComposite {
-    async fn add_label(&self, jar: &Jar, label: &str) -> HttpResult<String> {
-        let apis = self.apis.iter();
-        for api in apis {
-            api.add_label(jar, label).await?;
-        }
-        Ok(label.to_string())
-    }
-
-    async fn get_current_draw(&self, jar: &Jar) -> HttpResult<Option<String>> {
-        let api = self.apis.first().unwrap();
-        api.get_current_draw(jar).await
-    }
-
-    async fn draw(&self, jar: &Jar, meal: Meal) -> HttpResult<Option<String>> {
-        // Just change state on the first API
-        let api = self.apis.first().unwrap();
-        api.draw(jar, meal).await
-    }
-
-    async fn add_place(&self, jar: &Jar, place: Place, meal: Vec<Meal>) -> HttpResult<Place> {
-        let apis = self.apis.iter();
-        for api in apis {
-            api.add_place(jar, place.clone(), meal.clone()).await?;
-        }
-        Ok(place)
-    }
-
-    async fn remove_drawn_place(&self, jar: &Jar, place: Option<Place>) -> HttpResult<()> {
-        let apis = self.apis.iter();
-        for api in apis {
-            api.remove_drawn_place(jar, place.clone()).await?;
-        }
-        Ok(())
-    }
-
-    async fn delete_place(&self, jar: &Jar, place: Place) -> HttpResult<Place> {
-        let apis = self.apis.iter();
-        for api in apis {
-            api.delete_place(jar, place.clone()).await?;
-        }
-        Ok(place)
-    }
-
-    fn firebase_url(&self, _jar: &Jar, _path: &str) -> String {
-        panic!("No firebase url to define on composite api")
-    }
 }
 
 #[async_trait]
@@ -223,23 +124,7 @@ impl FirebaseApi for FirebaseApiV2 {
             .client
             .make_json_request(|client| client.get(self.firebase_url(jar, "current_draw")))
             .await?;
-        // Get the current draw name from the key
-        let place = match key {
-            Some(key) => {
-                let place: String = self
-                    .client
-                    .make_json_request(|client| {
-                        client.get(self.firebase_url(
-                            jar,
-                            format!("{}/{}", FIREBASE_API_V2_PLACE_NAME_TABLE, key).as_str(),
-                        ))
-                    })
-                    .await?;
-                Some(place)
-            }
-            None => None,
-        };
-        Ok(place)
+        self.get_current_draw_name(jar, key).await
     }
 
     async fn draw(&self, jar: &Jar, meal: Meal) -> HttpResult<Option<String>> {
@@ -263,31 +148,17 @@ impl FirebaseApi for FirebaseApiV2 {
             .keys()
             .choose(&mut rand::thread_rng())
             .map(|v| v.to_string());
-        match maybe_drawn_place_key {
-            Some(drawn_place_key) => {
-                self.client
-                    .make_json_request(|client| {
-                        client
-                            .put(self.firebase_url(jar, FIREBASE_API_V2_CURRENT_DRAW_KEY))
-                            .json(&drawn_place_key)
-                    })
-                    .await?;
-                let place_name: String = self
-                    .client
-                    .make_json_request(|client| {
-                        client.get(
-                            self.firebase_url(
-                                jar,
-                                format!("{}/{}", FIREBASE_API_V2_PLACE_NAME_TABLE, drawn_place_key)
-                                    .as_str(),
-                            ),
-                        )
-                    })
-                    .await?;
-                Ok(Some(place_name))
-            }
-            None => Ok(None),
+        if let Some(drawn_place_key) = &maybe_drawn_place_key {
+            let _response: serde_json::Value = self
+                .client
+                .make_json_request(|client| {
+                    client
+                        .put(self.firebase_url(jar, FIREBASE_API_V2_CURRENT_DRAW_KEY))
+                        .json(drawn_place_key)
+                })
+                .await?;
         }
+        self.get_current_draw_name(jar, maybe_drawn_place_key).await
     }
 
     async fn add_place(&self, jar: &Jar, place: Place, meal: Vec<Meal>) -> HttpResult<Place> {
@@ -412,87 +283,32 @@ impl FirebaseApi for FirebaseApiV2 {
     }
 }
 
-#[async_trait]
-impl FirebaseApi for FirebaseApiV1 {
-    async fn add_label(&self, jar: &Jar, label: &str) -> HttpResult<String> {
-        let _ = self
-            .make_json_request(|client| client.put(self.firebase_url(jar, LABEL_PATH)).json(label))
-            .await?;
-        Ok(label.to_string())
+impl FirebaseApiV2 {
+    pub fn new(client: reqwest::Client) -> FirebaseApiV2 {
+        FirebaseApiV2 { client }
     }
 
-    async fn get_current_draw(&self, jar: &Jar) -> HttpResult<Option<String>> {
-        self.make_json_request(|client| client.get(self.firebase_url(jar, CURRENT_DRAW_PATH)))
-            .await
-    }
-
-    async fn draw(&self, jar: &Jar, meal: Meal) -> HttpResult<Option<String>> {
-        let shops: HashMap<String, String> = self.get_list_of_places(jar, meal).await?;
-        // Pick randomly a shop
-        let shop = shops.values().choose(&mut rand::thread_rng());
-        if let Some(picked) = shop {
-            let _place: String = self
-                .make_json_request(|client| {
-                    client
-                        .put(self.firebase_url(jar, CURRENT_DRAW_PATH))
-                        .json(picked)
-                })
-                .await?;
-        }
-        Result::Ok(shop.map(|s| s.to_string()))
-    }
-
-    async fn add_place(&self, jar: &Jar, place: Place, meals: Vec<Meal>) -> HttpResult<Place> {
-        let place_name = &place.clone().name;
-        // TODO improve by running those futures concurrently
-        for meal in meals {
-            let _: HashMap<String, String> = self
-                .make_json_request(|client| {
-                    client
-                        .post(self.firebase_url(jar, meal.into()))
-                        .json::<String>(place_name)
-                })
-                .await?;
-        }
-        HttpResult::Ok(place)
-    }
-
-    async fn remove_drawn_place(&self, jar: &Jar, place: Option<Place>) -> HttpResult<()> {
-        let remove_current = self
-            .make_json_request(|client| client.delete(self.firebase_url(jar, CURRENT_DRAW_PATH)));
-        match place {
-            None => remove_current.await?,
-            Some(place) => {
-                if let Some(drawn_place) = self.get_current_draw(jar).await? {
-                    if place.name == drawn_place {
-                        remove_current.await?;
-                    }
-                }
+    async fn get_current_draw_name(
+        &self,
+        jar: &Jar,
+        draw_key: Option<String>,
+    ) -> HttpResult<Option<String>> {
+        // Get the current draw name from the key
+        let place = match draw_key {
+            Some(key) => {
+                let place: String = self
+                    .client
+                    .make_json_request(|client| {
+                        client.get(self.firebase_url(
+                            jar,
+                            format!("{}/{}", FIREBASE_API_V2_PLACE_NAME_TABLE, key).as_str(),
+                        ))
+                    })
+                    .await?;
+                Some(place)
             }
-        }
-
-        HttpResult::Ok(())
-    }
-
-    async fn delete_place(&self, jar: &Jar, place: Place) -> HttpResult<Place> {
-        // As we are using a very bad data structure we need to loop on all "rows" to find the one to delete
-        // Besides we are too lazy to import new crate and do it asynchronosuly or/and with a functional pattern
-        // mapping meal to entries, filtering and folding into a list of keys to delete...
-        let mut paths_to_delete: Vec<String> = Vec::new();
-        for meal in vec![Meal::Lunch, Meal::Dinner] {
-            let meal_path: &str = meal.clone().into();
-            let places = self.get_list_of_places(jar, meal).await?;
-            for (k, v) in places {
-                if v == place.name {
-                    paths_to_delete.push(format!("{}/{}", meal_path, k));
-                }
-            }
-        }
-        for path in paths_to_delete {
-            self.make_json_request(|client| client.delete(self.firebase_url(jar, path.as_str())))
-                .await?;
-        }
-        self.remove_drawn_place(jar, Some(place.clone())).await?;
-        HttpResult::Ok(place)
+            None => None,
+        };
+        Ok(place)
     }
 }
