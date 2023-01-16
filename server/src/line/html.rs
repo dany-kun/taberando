@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::Sender;
 use warp::Filter;
 
-use crate::app::core::{Action, Client, Meal, Place};
+use crate::app::core::{Action, Client, Meal};
 use crate::line::http::LineChannel;
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -81,14 +81,6 @@ fn to_action(source: &Source, body: &Entry) -> Option<Action> {
             "dinner" => Some(vec![Meal::Dinner]),
             _unknown => None,
         };
-        meals.map(|m| {
-            Action::Add(
-                c,
-                Place {
-                    name: body.place.to_string(),
-                },
-                m,
-            )
-        })
+        meals.map(|m| Action::Add(c, body.place.to_string(), m))
     })
 }
