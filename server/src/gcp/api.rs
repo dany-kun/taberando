@@ -126,13 +126,16 @@ impl FirebaseApi for FirebaseApiV2 {
                 client.get(self.firebase_url(jar, FIREBASE_API_V2_CURRENT_DRAW_KEY))
             })
             .await?;
-        if let Some(k) = key {
+        let current_place = if let Some(k) = key {
             let name = self.get_current_draw_name(jar, k.clone()).await?;
-            if let Some(n) = name {
-                return Ok(Some(Place { name: n, key: k }));
-            }
-        }
-        Ok(None)
+            Some(Place {
+                name: name.unwrap_or_else(|| "Could not find place name".to_string()),
+                key: k,
+            })
+        } else {
+            None
+        };
+        Ok(current_place)
     }
 
     async fn draw(&self, jar: &Jar, meal: Meal) -> HttpResult<Option<Place>> {
@@ -308,7 +311,7 @@ impl FirebaseApiV2 {
         draw_key: String,
     ) -> HttpResult<Option<String>> {
         // Get the current draw name from the key
-        let place: String = self
+        let place: Option<String> = self
             .client
             .make_json_request(|client| {
                 client.get(self.firebase_url(
@@ -317,6 +320,6 @@ impl FirebaseApiV2 {
                 ))
             })
             .await?;
-        Ok(Some(place))
+        Ok(place)
     }
 }
