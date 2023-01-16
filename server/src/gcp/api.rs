@@ -13,6 +13,7 @@ use crate::http::{HttpClient, HttpResult};
 const CURRENT_DRAW_PATH: &str = "pending_shop";
 const FIREBASE_API_V2_CURRENT_DRAW_KEY: &str = "current_draw";
 const FIREBASE_API_V2_PLACES_KEY: &str = "places";
+const FIREBASE_API_V2_SLOTS_KEY: &str = "timeslots";
 const FIREBASE_API_V2_PLACE_NAME_TABLE: &str = "place_id_name";
 const LABEL_PATH: &str = "label";
 
@@ -58,16 +59,21 @@ pub struct ApiV2Place {
     timeslot: Vec<Meal>,
 }
 
+impl Meal {
+    fn serialized(&self) -> &'static str {
+        match self {
+            Meal::Lunch => "昼",
+            Meal::Dinner => "夜",
+        }
+    }
+}
+
 impl serde::Serialize for Meal {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        let serialized = match self {
-            Meal::Lunch => "昼",
-            Meal::Dinner => "夜",
-        };
-        serializer.serialize_str(serialized)
+        serializer.serialize_str(self.serialized())
     }
 }
 
@@ -236,8 +242,27 @@ impl FirebaseApi for FirebaseApiV2 {
         Ok(place)
     }
 
-    async fn draw(&self, _jar: &Jar, _meal: Meal) -> HttpResult<Option<String>> {
-        todo!()
+    async fn draw(&self, jar: &Jar, meal: Meal) -> HttpResult<Option<String>> {
+        // Very un-efficient since we are retrieving the whole set of places for a meal...
+        let place_response: serde_json::Value = self
+            .client
+            .make_json_request(|client| {
+                client
+                    .get(self.firebase_url(
+                        jar,
+                        format!("{}/{}", FIREBASE_API_V2_SLOTS_KEY, meal.serialized()).as_str(),
+                    ))
+                    .query(&[("shallow", "true")])
+            })
+            .await?;
+        let place_keys = match place_response {
+            serde_json::Value::Object(map) => map,
+            _ => unreachable!(),
+        };
+        Ok(place_keys
+            .keys()
+            .choose(&mut rand::thread_rng())
+            .map(|v| v.to_string()))
     }
 
     async fn add_place(&self, jar: &Jar, place: Place, meal: Vec<Meal>) -> HttpResult<Place> {
@@ -249,10 +274,31 @@ impl FirebaseApi for FirebaseApiV2 {
                     .post(self.firebase_url(jar, FIREBASE_API_V2_PLACES_KEY))
                     .json::<ApiV2Place>(&ApiV2Place {
                         name: place_name.clone(),
-                        timeslot: meal,
+                        timeslot: meal.clone(),
                     })
             })
             .await?;
+
+        // Store the timeslot to tables
+        let _: Vec<serde_json::Value> = futures::future::try_join_all(meal.iter().map(|meal| {
+            self.client.make_json_request(|client| {
+                client
+                    .put(
+                        self.firebase_url(
+                            jar,
+                            format!(
+                                "{}/{}/{}",
+                                FIREBASE_API_V2_SLOTS_KEY,
+                                meal.serialized(),
+                                response.key
+                            )
+                            .as_str(),
+                        ),
+                    )
+                    .json(&serde_json::Value::Bool(true))
+            })
+        }))
+        .await?;
 
         // Store the generated key to some indexing table
         // Should be done in a transaction + need monitoring..if this fails we corrupt our DB data...
@@ -292,6 +338,7 @@ impl FirebaseApi for FirebaseApiV2 {
     // https://firebase.google.com/docs/database/rest/save-data#section-conditional-requests
     async fn delete_place(&self, jar: &Jar, place: Place) -> HttpResult<Place> {
         let place_name = &place.name;
+        // Delete from places list
         self.client
             .make_request(|client| {
                 client.delete(self.firebase_url(
@@ -300,6 +347,27 @@ impl FirebaseApi for FirebaseApiV2 {
                 ))
             })
             .await?;
+        // Delete from timeslots
+        for meal in vec![Meal::Lunch, Meal::Dinner] {
+            self.client
+                .make_request(|client| {
+                    client.delete(
+                        self.firebase_url(
+                            jar,
+                            format!(
+                                "{}/{}/{}",
+                                FIREBASE_API_V2_SLOTS_KEY,
+                                meal.serialized(),
+                                place_name
+                            )
+                            .as_str(),
+                        ),
+                    )
+                })
+                .await?;
+        }
+
+        // Delete from place names
         let _: HttpResult<serde_json::Value> = self
             .client
             .make_json_request(|client| {
