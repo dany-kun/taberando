@@ -122,7 +122,9 @@ impl FirebaseApi for FirebaseApiV2 {
         // Get the current draw key
         let key: Option<String> = self
             .client
-            .make_json_request(|client| client.get(self.firebase_url(jar, "current_draw")))
+            .make_json_request(|client| {
+                client.get(self.firebase_url(jar, FIREBASE_API_V2_CURRENT_DRAW_KEY))
+            })
             .await?;
         if let Some(k) = key {
             let name = self.get_current_draw_name(jar, k.clone()).await?;
