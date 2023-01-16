@@ -13,7 +13,7 @@ use crate::http::{HttpClient, HttpResult};
 const CURRENT_DRAW_PATH: &str = "pending_shop";
 const FIREBASE_API_V2_CURRENT_DRAW_KEY: &str = "current_draw";
 const FIREBASE_API_V2_PLACES_KEY: &str = "places";
-const FIREBASE_API_V2_SLOTS_KEY: &str = "slots";
+const FIREBASE_API_V2_SLOTS_KEY: &str = "timeslots";
 const FIREBASE_API_V2_PLACE_NAME_TABLE: &str = "place_id_name";
 const LABEL_PATH: &str = "label";
 
@@ -242,8 +242,27 @@ impl FirebaseApi for FirebaseApiV2 {
         Ok(place)
     }
 
-    async fn draw(&self, _jar: &Jar, _meal: Meal) -> HttpResult<Option<String>> {
-        todo!()
+    async fn draw(&self, jar: &Jar, meal: Meal) -> HttpResult<Option<String>> {
+        // Very un-efficient since we are retrieving the whole set of places for a meal...
+        let place_response: serde_json::Value = self
+            .client
+            .make_json_request(|client| {
+                client
+                    .get(self.firebase_url(
+                        jar,
+                        format!("{}/{}", FIREBASE_API_V2_SLOTS_KEY, meal.serialized()).as_str(),
+                    ))
+                    .query(&[("shallow", "true")])
+            })
+            .await?;
+        let place_keys = match place_response {
+            serde_json::Value::Object(map) => map,
+            _ => unreachable!(),
+        };
+        Ok(place_keys
+            .keys()
+            .choose(&mut rand::thread_rng())
+            .map(|v| v.to_string()))
     }
 
     async fn add_place(&self, jar: &Jar, place: Place, meal: Vec<Meal>) -> HttpResult<Place> {
@@ -337,7 +356,7 @@ impl FirebaseApi for FirebaseApiV2 {
                             jar,
                             format!(
                                 "{}/{}/{}",
-                                FIREBASE_API_V2_PLACES_KEY,
+                                FIREBASE_API_V2_SLOTS_KEY,
                                 meal.serialized(),
                                 place_name
                             )
