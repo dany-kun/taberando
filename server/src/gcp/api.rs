@@ -87,11 +87,11 @@ impl<'de> serde::Deserialize<'de> for Meal {
 pub trait FirebaseApi {
     async fn add_label(&self, jar: &Jar, label: &str) -> HttpResult<String>;
 
-    async fn get_current_draw(&self, jar: &Jar) -> HttpResult<Option<String>>;
+    async fn get_current_draw(&self, jar: &Jar) -> HttpResult<Option<Place>>;
 
-    async fn draw(&self, jar: &Jar, meal: Meal) -> HttpResult<Option<String>>;
+    async fn draw(&self, jar: &Jar, meal: Meal) -> HttpResult<Option<Place>>;
 
-    async fn add_place(&self, jar: &Jar, place: Place, meal: Vec<Meal>) -> HttpResult<Place>;
+    async fn add_place(&self, jar: &Jar, place_name: &str, meal: Vec<Meal>) -> HttpResult<Place>;
 
     async fn remove_drawn_place(&self, jar: &Jar, place: Option<Place>) -> HttpResult<()>;
 
@@ -118,16 +118,22 @@ impl FirebaseApi for FirebaseApiV2 {
         Ok(label.to_string())
     }
 
-    async fn get_current_draw(&self, jar: &Jar) -> HttpResult<Option<String>> {
+    async fn get_current_draw(&self, jar: &Jar) -> HttpResult<Option<Place>> {
         // Get the current draw key
         let key: Option<String> = self
             .client
             .make_json_request(|client| client.get(self.firebase_url(jar, "current_draw")))
             .await?;
-        self.get_current_draw_name(jar, key).await
+        if let Some(k) = key {
+            let name = self.get_current_draw_name(jar, k.clone()).await?;
+            if let Some(n) = name {
+                return Ok(Some(Place { name: n, key: k }));
+            }
+        }
+        Ok(None)
     }
 
-    async fn draw(&self, jar: &Jar, meal: Meal) -> HttpResult<Option<String>> {
+    async fn draw(&self, jar: &Jar, meal: Meal) -> HttpResult<Option<Place>> {
         // Very un-efficient since we are retrieving the whole set of places for a meal...
         let place_response: serde_json::Value = self
             .client
@@ -157,19 +163,25 @@ impl FirebaseApi for FirebaseApiV2 {
                         .json(drawn_place_key)
                 })
                 .await?;
+            let maybe_name = self
+                .get_current_draw_name(jar, drawn_place_key.clone())
+                .await?;
+            return Ok(Some(Place {
+                name: maybe_name.unwrap_or_default(),
+                key: drawn_place_key.clone(),
+            }));
         }
-        self.get_current_draw_name(jar, maybe_drawn_place_key).await
+        Ok(None)
     }
 
-    async fn add_place(&self, jar: &Jar, place: Place, meal: Vec<Meal>) -> HttpResult<Place> {
-        let place_name = &place.name;
+    async fn add_place(&self, jar: &Jar, place_name: &str, meal: Vec<Meal>) -> HttpResult<Place> {
         let response: AppendedKey = self
             .client
             .make_json_request(|client| {
                 client
                     .post(self.firebase_url(jar, FIREBASE_API_V2_PLACES_KEY))
                     .json::<ApiV2Place>(&ApiV2Place {
-                        name: place_name.clone(),
+                        name: place_name.to_string(),
                         timeslot: meal.clone(),
                     })
             })
@@ -215,7 +227,8 @@ impl FirebaseApi for FirebaseApiV2 {
             .await?;
 
         HttpResult::Ok(Place {
-            name: added_place_key,
+            name: place_name.to_string(),
+            key: added_place_key,
         })
     }
 
@@ -291,24 +304,18 @@ impl FirebaseApiV2 {
     async fn get_current_draw_name(
         &self,
         jar: &Jar,
-        draw_key: Option<String>,
+        draw_key: String,
     ) -> HttpResult<Option<String>> {
         // Get the current draw name from the key
-        let place = match draw_key {
-            Some(key) => {
-                let place: String = self
-                    .client
-                    .make_json_request(|client| {
-                        client.get(self.firebase_url(
-                            jar,
-                            format!("{}/{}", FIREBASE_API_V2_PLACE_NAME_TABLE, key).as_str(),
-                        ))
-                    })
-                    .await?;
-                Some(place)
-            }
-            None => None,
-        };
-        Ok(place)
+        let place: String = self
+            .client
+            .make_json_request(|client| {
+                client.get(self.firebase_url(
+                    jar,
+                    format!("{}/{}", FIREBASE_API_V2_PLACE_NAME_TABLE, draw_key).as_str(),
+                ))
+            })
+            .await?;
+        Ok(Some(place))
     }
 }

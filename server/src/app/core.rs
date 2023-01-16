@@ -10,7 +10,7 @@ pub enum Client {
 
 #[derive(Debug)]
 pub enum Action {
-    Add(Client, Place, Vec<Meal>),
+    Add(Client, String, Vec<Meal>),
     Draw(Client, Meal),
     PostponeCurrent(Client),
     ArchiveCurrent(Client),
@@ -27,7 +27,7 @@ pub enum Meal {
 
 #[derive(Debug, Clone)]
 pub struct Place {
-    // Rename this to Key after migration to v2
+    pub key: String,
     pub name: String,
 }
 
@@ -88,9 +88,9 @@ pub async fn handle_action<T: FirebaseApi + Sync>(
         Action::WhoAmI(source) => {
             line_client.whoami(&source).await;
         }
-        Action::Add(source, place, meals) => {
+        Action::Add(source, place_name, meals) => {
             line_client
-                .add_place(&source, firebase_client, place, meals, &host)
+                .add_place(&source, firebase_client, &place_name, meals, &host)
                 .await;
         }
     }
