@@ -152,13 +152,15 @@ impl FirebaseApi for FirebaseApiV2 {
             })
             .await?;
         let place_keys = match place_response {
-            serde_json::Value::Object(map) => map,
-            _ => unreachable!(),
+            serde_json::Value::Object(map) => Some(map),
+            _ => None,
         };
-        let maybe_drawn_place_key = place_keys
-            .keys()
-            .choose(&mut rand::thread_rng())
-            .map(|v| v.to_string());
+        let maybe_drawn_place_key = place_keys.and_then(|p| {
+            p.keys()
+                .choose(&mut rand::thread_rng())
+                .map(|v| v.to_string())
+        });
+
         if let Some(drawn_place_key) = &maybe_drawn_place_key {
             let _response: serde_json::Value = self
                 .client
