@@ -246,13 +246,12 @@ impl FirebaseApi for FirebaseApiV2 {
 
     // https://firebase.google.com/docs/database/rest/save-data#section-conditional-requests
     async fn delete_place(&self, jar: &Jar, place: Place) -> HttpResult<Place> {
-        let place_name = &place.name;
         // Delete from places list
         self.client
             .make_request(|client| {
                 client.delete(self.firebase_url(
                     jar,
-                    format!("{}/{}", FIREBASE_API_V2_PLACES_KEY, place_name).as_str(),
+                    format!("{}/{}", FIREBASE_API_V2_PLACES_KEY, place.key).as_str(),
                 ))
             })
             .await?;
@@ -267,7 +266,7 @@ impl FirebaseApi for FirebaseApiV2 {
                                 "{}/{}/{}",
                                 FIREBASE_API_V2_SLOTS_KEY,
                                 meal.serialized(),
-                                place_name
+                                &place.key
                             )
                             .as_str(),
                         ),
@@ -282,7 +281,7 @@ impl FirebaseApi for FirebaseApiV2 {
             .make_json_request(|client| {
                 client.delete(self.firebase_url(
                     jar,
-                    format!("{}/{}", FIREBASE_API_V2_PLACE_NAME_TABLE, place_name).as_str(),
+                    format!("{}/{}", FIREBASE_API_V2_PLACE_NAME_TABLE, place.key).as_str(),
                 ))
             })
             .await;
