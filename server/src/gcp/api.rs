@@ -259,10 +259,35 @@ impl FirebaseApi for FirebaseApiV2 {
             serde_json::Value::Object(map) => map,
             _ => unreachable!(),
         };
-        Ok(place_keys
+        let maybe_drawn_place_key = place_keys
             .keys()
             .choose(&mut rand::thread_rng())
-            .map(|v| v.to_string()))
+            .map(|v| v.to_string());
+        match maybe_drawn_place_key {
+            Some(drawn_place_key) => {
+                self.client
+                    .make_json_request(|client| {
+                        client
+                            .put(self.firebase_url(jar, FIREBASE_API_V2_CURRENT_DRAW_KEY))
+                            .json(&drawn_place_key)
+                    })
+                    .await?;
+                let place_name: String = self
+                    .client
+                    .make_json_request(|client| {
+                        client.get(
+                            self.firebase_url(
+                                jar,
+                                format!("{}/{}", FIREBASE_API_V2_PLACE_NAME_TABLE, drawn_place_key)
+                                    .as_str(),
+                            ),
+                        )
+                    })
+                    .await?;
+                Ok(Some(place_name))
+            }
+            None => Ok(None),
+        }
     }
 
     async fn add_place(&self, jar: &Jar, place: Place, meal: Vec<Meal>) -> HttpResult<Place> {
@@ -303,7 +328,7 @@ impl FirebaseApi for FirebaseApiV2 {
         // Store the generated key to some indexing table
         // Should be done in a transaction + need monitoring..if this fails we corrupt our DB data...
         let added_place_key = response.key;
-        let _place_name = self
+        let _place_name: String = self
             .client
             .make_json_request(|client| {
                 client
