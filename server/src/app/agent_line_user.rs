@@ -87,7 +87,7 @@ async fn delete_current<F: FnOnce(String) -> String, T: FirebaseApi + Sync>(
                 let _ = firebase_client
                     .delete_place(
                         &jar,
-                        Place {
+                        &Place {
                             name: drawn_place_name.clone(),
                             key: draw.key,
                         },
@@ -260,9 +260,7 @@ impl Agent for LineClient {
                     );
                 }
                 Some(draw) => {
-                    let _ = firebase_client
-                        .remove_drawn_place(&jar, Some(draw.clone()))
-                        .await;
+                    let _ = firebase_client.remove_drawn_place(&jar, Some(&draw)).await;
                     let _ = self
                         .send_to_all_users(
                             client,

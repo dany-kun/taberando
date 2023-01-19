@@ -93,9 +93,9 @@ pub trait FirebaseApi {
 
     async fn add_place(&self, jar: &Jar, place_name: &str, meal: Vec<Meal>) -> HttpResult<Place>;
 
-    async fn remove_drawn_place(&self, jar: &Jar, place: Option<Place>) -> HttpResult<()>;
+    async fn remove_drawn_place(&self, jar: &Jar, place: Option<&Place>) -> HttpResult<()>;
 
-    async fn delete_place(&self, jar: &Jar, place: Place) -> HttpResult<Place>;
+    async fn delete_place(&self, jar: &Jar, place: &Place) -> HttpResult<Place>;
 
     fn firebase_url(&self, jar: &Jar, path: &str) -> String {
         format!("{}/{}/{}.json", BASE_URL, jar, path)
@@ -127,7 +127,7 @@ impl FirebaseApi for FirebaseApiV2 {
             })
             .await?;
         let current_place = if let Some(k) = key {
-            let name = self.get_current_draw_name(jar, k.clone()).await?;
+            let name = self.get_current_draw_name(jar, &k).await?;
             Some(Place {
                 name: name.unwrap_or_else(|| "Could not find place name".to_string()),
                 key: k,
@@ -170,12 +170,10 @@ impl FirebaseApi for FirebaseApiV2 {
                         .json(drawn_place_key)
                 })
                 .await?;
-            let maybe_name = self
-                .get_current_draw_name(jar, drawn_place_key.clone())
-                .await?;
+            let maybe_name = self.get_current_draw_name(jar, drawn_place_key).await?;
             return Ok(Some(Place {
                 name: maybe_name.unwrap_or_default(),
-                key: drawn_place_key.clone(),
+                key: drawn_place_key.to_string(),
             }));
         }
         Ok(None)
@@ -239,7 +237,7 @@ impl FirebaseApi for FirebaseApiV2 {
         })
     }
 
-    async fn remove_drawn_place(&self, jar: &Jar, _place: Option<Place>) -> HttpResult<()> {
+    async fn remove_drawn_place(&self, jar: &Jar, _place: Option<&Place>) -> HttpResult<()> {
         // TODO use the passed parameter
         if let Some(_drawn_place) = self.get_current_draw(jar).await? {
             self.client
@@ -252,7 +250,7 @@ impl FirebaseApi for FirebaseApiV2 {
     }
 
     // https://firebase.google.com/docs/database/rest/save-data#section-conditional-requests
-    async fn delete_place(&self, jar: &Jar, place: Place) -> HttpResult<Place> {
+    async fn delete_place(&self, jar: &Jar, place: &Place) -> HttpResult<Place> {
         // Delete from places list
         self.client
             .make_request(|client| {
@@ -293,7 +291,7 @@ impl FirebaseApi for FirebaseApiV2 {
             })
             .await;
 
-        self.remove_drawn_place(jar, Some(place.clone())).await?;
+        self.remove_drawn_place(jar, Some(place)).await?;
         HttpResult::Ok(place.clone())
     }
 
@@ -307,11 +305,7 @@ impl FirebaseApiV2 {
         FirebaseApiV2 { client }
     }
 
-    async fn get_current_draw_name(
-        &self,
-        jar: &Jar,
-        draw_key: String,
-    ) -> HttpResult<Option<String>> {
+    async fn get_current_draw_name(&self, jar: &Jar, draw_key: &str) -> HttpResult<Option<String>> {
         // Get the current draw name from the key
         let place: Option<String> = self
             .client

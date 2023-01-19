@@ -23,21 +23,19 @@ pub struct Postback {
 
 impl EventSource {
     pub fn to_client(&self) -> Option<Client> {
+        let user_id = self.user_id.as_ref();
         match self.source_type.as_str() {
-            "user" => self
-                .user_id
-                .clone()
-                .map(|id| Client::Line(LineChannel::User(id))),
-            "group" => self.group_id.clone().map(|id| {
+            "user" => user_id.map(|id| Client::Line(LineChannel::User(id.to_string()))),
+            "group" => self.group_id.as_ref().map(|id| {
                 Client::Line(LineChannel::Group {
-                    id,
-                    user_id: self.user_id.clone(),
+                    id: id.to_string(),
+                    user_id: user_id.map(|user_id| user_id.to_string()),
                 })
             }),
-            "room" => self.room_id.clone().map(|id| {
+            "room" => self.room_id.as_ref().map(|id| {
                 Client::Line(LineChannel::Room {
-                    id,
-                    user_id: self.user_id.clone(),
+                    id: id.to_string(),
+                    user_id: user_id.map(|user_id| user_id.to_string()),
                 })
             }),
             _ => Option::None,
