@@ -13,6 +13,10 @@ path = "src/bin/line_cli.rs"
 name = "local_tunnel"
 path = "src/bin/local_tunnel.rs"
 
+[[bin]]
+name = "migration_v2"
+path = "src/bin/migration_v2.rs"
+
 [build-dependencies]
 serde_json = "1.0.74"
 

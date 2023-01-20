@@ -91,7 +91,7 @@ pub trait FirebaseApi {
 
     async fn draw(&self, jar: &Jar, meal: Meal) -> HttpResult<Option<Place>>;
 
-    async fn add_place(&self, jar: &Jar, place_name: &str, meal: Vec<Meal>) -> HttpResult<Place>;
+    async fn add_place(&self, jar: &Jar, place_name: &str, meal: &[Meal]) -> HttpResult<Place>;
 
     async fn remove_drawn_place(&self, jar: &Jar, place: Option<&Place>) -> HttpResult<()>;
 
@@ -162,14 +162,7 @@ impl FirebaseApi for FirebaseApiV2 {
         });
 
         if let Some(drawn_place_key) = &maybe_drawn_place_key {
-            let _response: serde_json::Value = self
-                .client
-                .make_json_request(|client| {
-                    client
-                        .put(self.firebase_url(jar, FIREBASE_API_V2_CURRENT_DRAW_KEY))
-                        .json(drawn_place_key)
-                })
-                .await?;
+            self.update_current_draw(jar, drawn_place_key).await?;
             let maybe_name = self.get_current_draw_name(jar, drawn_place_key).await?;
             return Ok(Some(Place {
                 name: maybe_name.unwrap_or_default(),
@@ -179,7 +172,7 @@ impl FirebaseApi for FirebaseApiV2 {
         Ok(None)
     }
 
-    async fn add_place(&self, jar: &Jar, place_name: &str, meal: Vec<Meal>) -> HttpResult<Place> {
+    async fn add_place(&self, jar: &Jar, place_name: &str, meals: &[Meal]) -> HttpResult<Place> {
         let response: AppendedKey = self
             .client
             .make_json_request(|client| {
@@ -187,13 +180,13 @@ impl FirebaseApi for FirebaseApiV2 {
                     .post(self.firebase_url(jar, FIREBASE_API_V2_PLACES_KEY))
                     .json::<ApiV2Place>(&ApiV2Place {
                         name: place_name.to_string(),
-                        timeslot: meal.clone(),
+                        timeslot: meals.to_vec(),
                     })
             })
             .await?;
 
         // Store the timeslot to tables
-        let _: Vec<serde_json::Value> = futures::future::try_join_all(meal.iter().map(|meal| {
+        let _: Vec<serde_json::Value> = futures::future::try_join_all(meals.iter().map(|meal| {
             self.client.make_json_request(|client| {
                 client
                     .put(
@@ -317,5 +310,17 @@ impl FirebaseApiV2 {
             })
             .await?;
         Ok(place)
+    }
+
+    pub async fn update_current_draw(&self, jar: &Jar, drawn_place_key: &str) -> HttpResult<()> {
+        let _: serde_json::Value = self
+            .client
+            .make_json_request(|client| {
+                client
+                    .put(self.firebase_url(jar, FIREBASE_API_V2_CURRENT_DRAW_KEY))
+                    .json(drawn_place_key)
+            })
+            .await?;
+        Ok(())
     }
 }

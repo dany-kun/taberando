@@ -311,7 +311,7 @@ impl Agent for LineClient {
         host: &str,
     ) {
         let jar: Jar = client.into();
-        let result = firebase_client.add_place(&jar, place_name, meals).await;
+        let result = firebase_client.add_place(&jar, place_name, &meals).await;
         match result {
             Ok(_) => {
                 self.refresh(client, firebase_client, host, |_| {
