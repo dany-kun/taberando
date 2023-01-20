@@ -11,7 +11,7 @@ use crate::line::json::{MessageContent, QuickReply};
 async fn get_current_draw<T: FirebaseApi + Sync>(
     client: &Client,
     firebase_client: &T,
-) -> (Jar, HttpResult<Option<String>>) {
+) -> (Jar, HttpResult<Option<Place>>) {
     let jar: Jar = client.into();
     let draw = firebase_client.get_current_draw(&jar).await;
     (jar, draw)
@@ -83,13 +83,20 @@ async fn delete_current<F: FnOnce(String) -> String, T: FirebaseApi + Sync>(
                 );
             }
             Some(draw) => {
+                let drawn_place_name = draw.name;
                 let _ = firebase_client
-                    .delete_place(&jar, Place { name: draw.clone() })
+                    .delete_place(
+                        &jar,
+                        &Place {
+                            name: drawn_place_name.clone(),
+                            key: draw.key,
+                        },
+                    )
                     .await;
                 let _ = line_client
                     .send_to_all_users(
                         client,
-                        MessageContent::text(&message_formatter(draw))
+                        MessageContent::text(&message_formatter(drawn_place_name.clone()))
                             .with_quick_replies(client.default_quick_replies(host)),
                     )
                     .await;
@@ -115,7 +122,7 @@ impl LineClient {
         let (_jar, draw) = get_current_draw(client, firebase_client).await;
         let message = draw
             .map(|res| {
-                let text_message = message(&res);
+                let text_message = message(&res.clone().map(|p| p.name));
                 res.map(|_draw| {
                     MessageContent::text(&text_message)
                         .with_quick_replies(client.on_draw_quick_replies(host))
@@ -209,7 +216,7 @@ impl Agent for LineClient {
                     let message = draw
                         .map(|res| {
                             res.map(|draw| {
-                                MessageContent::text(&format!("「{}」が出ました", draw))
+                                MessageContent::text(&format!("「{}」が出ました", draw.name))
                                     .with_quick_replies(client.on_draw_quick_replies(host))
                             })
                             .unwrap_or_else(|| {
@@ -224,7 +231,7 @@ impl Agent for LineClient {
                     let _ = self
                         .send_to_all_users(
                             client,
-                            MessageContent::text(&format!("「{}」が既に出ています", draw))
+                            MessageContent::text(&format!("「{}」が既に出ています", draw.name))
                                 .with_quick_replies(client.on_draw_quick_replies(host)),
                         )
                         .await;
@@ -253,13 +260,11 @@ impl Agent for LineClient {
                     );
                 }
                 Some(draw) => {
-                    let _ = firebase_client
-                        .remove_drawn_place(&jar, Some(Place { name: draw.clone() }))
-                        .await;
+                    let _ = firebase_client.remove_drawn_place(&jar, Some(&draw)).await;
                     let _ = self
                         .send_to_all_users(
                             client,
-                            MessageContent::text(&format!("{}を延期しました", &draw))
+                            MessageContent::text(&format!("{}を延期しました", &draw.name))
                                 .with_quick_replies(client.default_quick_replies(host)),
                         )
                         .await;
@@ -301,12 +306,12 @@ impl Agent for LineClient {
         &self,
         client: &Client,
         firebase_client: &T,
-        place: Place,
+        place_name: &str,
         meals: Vec<Meal>,
         host: &str,
     ) {
         let jar: Jar = client.into();
-        let result = firebase_client.add_place(&jar, place, meals).await;
+        let result = firebase_client.add_place(&jar, place_name, &meals).await;
         match result {
             Ok(_) => {
                 self.refresh(client, firebase_client, host, |_| {

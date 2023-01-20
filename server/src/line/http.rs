@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
-use serde::de::DeserializeOwned;
+use reqwest::Response;
 
 use crate::http::{Empty, HttpClient, HttpResult};
 use crate::line::api::LineApi;
@@ -35,14 +35,14 @@ impl HttpClient for LineClient {
     type Request = reqwest::RequestBuilder;
     type Client = reqwest::Client;
 
-    async fn make_json_request<T: DeserializeOwned, O: FnOnce(&Self::Client) -> Self::Request>(
+    async fn make_request<O: FnOnce(&Self::Client) -> Self::Request>(
         &self,
         to_request: O,
-    ) -> HttpResult<T>
+    ) -> HttpResult<Response>
     where
         O: Send,
     {
-        self.0.make_json_request(to_request).await
+        self.0.make_request(to_request).await
     }
 }
 

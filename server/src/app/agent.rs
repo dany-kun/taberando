@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use crate::app::core::{Client, Meal, Place};
+use crate::app::core::{Client, Meal};
 use crate::gcp::api::FirebaseApi;
 
 #[async_trait]
@@ -41,7 +41,7 @@ pub trait Agent {
         &self,
         client: &Client,
         firebase_client: &T,
-        place: Place,
+        place_name: &str,
         meals: Vec<Meal>,
         host: &str,
     );
