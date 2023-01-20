@@ -53,6 +53,8 @@ struct QuickReplyItems {
 pub struct QuickReply {
     #[serde(rename(serialize = "type"))]
     pub(crate) quick_reply_type: String,
+    #[serde(rename(serialize = "imageUrl"))]
+    pub(crate) image_url: Option<String>,
     pub(crate) action: QuickReplyAction,
 }
 
@@ -66,9 +68,14 @@ pub struct QuickReplyAction {
 }
 
 impl MessageContent {
-    pub(crate) fn postback_quick_reply(label: &str, data: &str) -> QuickReply {
+    pub(crate) fn postback_quick_reply(
+        label: &str,
+        data: &str,
+        icon: Option<String>,
+    ) -> QuickReply {
         QuickReply {
             quick_reply_type: "action".to_string(),
+            image_url: icon,
             action: QuickReplyAction {
                 quick_reply_action_type: "postback".to_string(),
                 label: label.to_string(),
@@ -78,9 +85,10 @@ impl MessageContent {
         }
     }
 
-    pub(crate) fn uri_quick_reply(label: &str, uri: &str) -> QuickReply {
+    pub(crate) fn uri_quick_reply(label: &str, uri: &str, icon: Option<String>) -> QuickReply {
         QuickReply {
             quick_reply_type: "action".to_string(),
+            image_url: icon,
             action: QuickReplyAction {
                 quick_reply_action_type: "uri".to_string(),
                 label: label.to_string(),
