@@ -5,8 +5,7 @@ use crate::app::core::{Client, Meal, Place};
 use crate::gcp::api::{FirebaseApi, Jar};
 use crate::http::{Empty, HttpResult};
 use crate::line::http::{LineChannel, LineClient};
-use crate::line::json;
-use crate::line::json::{MessageContent, QuickReply};
+use crate::line::json::{MessageContent, QuickReply, QuickReplyState};
 
 async fn get_current_draw<T: FirebaseApi + Sync>(
     client: &Client,
@@ -18,34 +17,7 @@ async fn get_current_draw<T: FirebaseApi + Sync>(
 }
 
 impl Client {
-    #[allow(dead_code)]
-    fn quick_replies(&self, host: &str, draw: Option<String>) -> Vec<QuickReply> {
-        match draw {
-            None => self.default_quick_replies(host),
-            Some(_) => self.on_draw_quick_replies(host),
-        }
-    }
-
-    fn default_quick_replies(&self, host: &str) -> Vec<QuickReply> {
-        let add_place = self.add_place_quick_reply(host);
-        vec![
-            add_place,
-            MessageContent::postback_quick_reply("🎲 昼", json::DRAW_LUNCH_ACTION, None),
-            MessageContent::postback_quick_reply("🎲 夜", json::DRAW_DINNER_ACTION, None),
-        ]
-    }
-
-    fn on_draw_quick_replies(&self, host: &str) -> Vec<QuickReply> {
-        let add_place = self.add_place_quick_reply(host);
-        vec![
-            add_place,
-            MessageContent::postback_quick_reply("✓ 完", json::ARCHIVE_ACTION, None),
-            MessageContent::postback_quick_reply("📅 延", json::POSTPONE_ACTION, None),
-            MessageContent::postback_quick_reply("❌ 削", json::DELETE_ACTION, None),
-        ]
-    }
-
-    fn add_place_quick_reply(&self, host: &str) -> QuickReply {
+    pub(crate) fn add_place_quick_reply(&self, host: &str) -> QuickReply {
         let (source_type, source_id) = match self {
             Client::Line(channel) => match channel {
                 LineChannel::User(id) => ("user", id),
@@ -97,7 +69,7 @@ async fn delete_current<F: FnOnce(String) -> String, T: FirebaseApi + Sync>(
                     .send_to_all_users(
                         client,
                         MessageContent::text(&message_formatter(drawn_place_name.clone()))
-                            .with_quick_replies(client.default_quick_replies(host)),
+                            .with_quick_replies(client, host, QuickReplyState::Idle),
                     )
                     .await;
             }
@@ -124,12 +96,18 @@ impl LineClient {
             .map(|res| {
                 let text_message = message(&res.clone().map(|p| p.name));
                 res.map(|_draw| {
-                    MessageContent::text(&text_message)
-                        .with_quick_replies(client.on_draw_quick_replies(host))
+                    MessageContent::text(&text_message).with_quick_replies(
+                        client,
+                        host,
+                        QuickReplyState::ActiveDraw,
+                    )
                 })
                 .unwrap_or_else(|| {
-                    MessageContent::text(&text_message)
-                        .with_quick_replies(client.default_quick_replies(host))
+                    MessageContent::text(&text_message).with_quick_replies(
+                        client,
+                        host,
+                        QuickReplyState::Idle,
+                    )
                 })
             })
             .unwrap_or_else(|e| MessageContent::error_message(&e));
@@ -217,11 +195,14 @@ impl Agent for LineClient {
                         .map(|res| {
                             res.map(|draw| {
                                 MessageContent::text(&format!("「{}」が出ました", draw.name))
-                                    .with_quick_replies(client.on_draw_quick_replies(host))
+                                    .with_quick_replies(client, host, QuickReplyState::ActiveDraw)
                             })
                             .unwrap_or_else(|| {
-                                MessageContent::text("何も出ませんでした")
-                                    .with_quick_replies(vec![client.add_place_quick_reply(host)])
+                                MessageContent::text("何も出ませんでした").with_quick_replies(
+                                    client,
+                                    host,
+                                    QuickReplyState::NoShops,
+                                )
                             })
                         })
                         .unwrap_or_else(|e| MessageContent::error_message(&e));
@@ -232,7 +213,7 @@ impl Agent for LineClient {
                         .send_to_all_users(
                             client,
                             MessageContent::text(&format!("「{}」が既に出ています", draw.name))
-                                .with_quick_replies(client.on_draw_quick_replies(host)),
+                                .with_quick_replies(client, host, QuickReplyState::ActiveDraw),
                         )
                         .await;
                 }
@@ -265,7 +246,7 @@ impl Agent for LineClient {
                         .send_to_all_users(
                             client,
                             MessageContent::text(&format!("{}を延期しました", &draw.name))
-                                .with_quick_replies(client.default_quick_replies(host)),
+                                .with_quick_replies(client, host, QuickReplyState::Idle),
                         )
                         .await;
                 }

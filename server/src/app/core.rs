@@ -11,7 +11,7 @@ pub enum Client {
 #[derive(Debug)]
 pub enum Action {
     Add(Client, String, Vec<Meal>),
-    Draw(Client, Meal),
+    Draw(Client, Meal, Option<Coordinates>),
     PostponeCurrent(Client),
     ArchiveCurrent(Client),
     RemoveCurrent(Client),
@@ -23,6 +23,12 @@ pub enum Action {
 pub enum Meal {
     Lunch,
     Dinner,
+}
+
+#[derive(Debug, Clone)]
+pub struct Coordinates {
+    pub latitude: f32,
+    pub longitude: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -64,7 +70,7 @@ pub async fn handle_action<T: FirebaseApi + Sync>(
 ) {
     let (host, action) = action;
     match action {
-        Action::Draw(source, meal) => {
+        Action::Draw(source, meal, _coordinates) => {
             line_client
                 .try_draw(meal, &source, firebase_client, &host)
                 .await;
