@@ -1,8 +1,10 @@
 use std::fmt::Debug;
 
+use crate::app;
 use serde::{Deserialize, Serialize};
 
 use crate::line::bot::{EventSource, Postback};
+use crate::line::json;
 
 pub const DRAW_LUNCH_ACTION: &str = "lunch_action";
 pub const DRAW_DINNER_ACTION: &str = "dinner_action";
@@ -39,6 +41,8 @@ pub struct MessageContent {
     #[serde(rename(deserialize = "type", serialize = "type"))]
     pub(crate) message_type: String,
     pub(crate) text: Option<String>,
+    pub(crate) latitude: Option<f32>,
+    pub(crate) longitude: Option<f32>,
     #[serde(rename(serialize = "quickReply"))]
     #[serde(skip_deserializing)]
     quick_replies: Option<QuickReplyItems>,
@@ -65,6 +69,12 @@ pub struct QuickReplyAction {
     pub(crate) label: String,
     pub(crate) data: Option<String>,
     pub(crate) uri: Option<String>,
+}
+
+pub enum QuickReplyState {
+    Idle,
+    ActiveDraw,
+    NoShops,
 }
 
 impl MessageContent {
@@ -98,9 +108,18 @@ impl MessageContent {
         }
     }
 
-    pub fn with_quick_replies(&mut self, replies: Vec<QuickReply>) -> MessageContent {
-        self.quick_replies = Some(QuickReplyItems { items: replies });
-        self.clone()
+    #[allow(dead_code)]
+    pub(crate) fn location_quick_reply(label: &str, icon: Option<String>) -> QuickReply {
+        QuickReply {
+            quick_reply_type: "action".to_string(),
+            image_url: icon,
+            action: QuickReplyAction {
+                quick_reply_action_type: "location".to_string(),
+                label: label.to_string(),
+                data: None,
+                uri: None,
+            },
+        }
     }
 
     pub(crate) fn text(message: &str) -> MessageContent {
@@ -108,7 +127,35 @@ impl MessageContent {
             message_type: "text".to_string(),
             text: Some(message.to_string()),
             quick_replies: None,
+            latitude: None,
+            longitude: None,
         }
+    }
+
+    pub fn with_quick_replies(
+        &mut self,
+        client: &app::core::Client,
+        host: &str,
+        quick_reply_state: QuickReplyState,
+    ) -> MessageContent {
+        let replies = match quick_reply_state {
+            QuickReplyState::Idle => vec![
+                client.add_place_quick_reply(host),
+                // MessageContent::location_quick_reply("location", None),
+                MessageContent::postback_quick_reply("🎲 昼", json::DRAW_LUNCH_ACTION, None),
+                MessageContent::postback_quick_reply("🎲 夜", json::DRAW_DINNER_ACTION, None),
+            ],
+            QuickReplyState::ActiveDraw => vec![
+                client.add_place_quick_reply(host),
+                // MessageContent::location_quick_reply("location", None),
+                MessageContent::postback_quick_reply("✓ 完", ARCHIVE_ACTION, None),
+                MessageContent::postback_quick_reply("📅 延", POSTPONE_ACTION, None),
+                MessageContent::postback_quick_reply("❌ 削", DELETE_ACTION, None),
+            ],
+            QuickReplyState::NoShops => vec![client.add_place_quick_reply(host)],
+        };
+        self.quick_replies = Some(QuickReplyItems { items: replies });
+        self.clone()
     }
 
     pub(crate) fn error_message<E: Debug>(error: &E) -> MessageContent {
@@ -116,6 +163,8 @@ impl MessageContent {
             message_type: "text".to_string(),
             text: Some(format!("Error {:?}", error)),
             quick_replies: None,
+            latitude: None,
+            longitude: None,
         }
     }
 }
