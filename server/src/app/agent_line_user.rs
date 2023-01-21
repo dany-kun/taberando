@@ -44,6 +44,7 @@ async fn delete_current<F: FnOnce(String) -> String, T: FirebaseApi + Sync>(
     line_client: &LineClient,
     firebase_client: &T,
     host: &str,
+    coordinates: Option<Coordinates>,
     message_formatter: F,
 ) {
     let (jar, draw) = get_current_draw(client, firebase_client).await;
@@ -69,7 +70,7 @@ async fn delete_current<F: FnOnce(String) -> String, T: FirebaseApi + Sync>(
                     .send_to_all_users(
                         client,
                         MessageContent::text(&message_formatter(drawn_place_name.clone()))
-                            .with_quick_replies(client, host, QuickReplyState::Idle(None)),
+                            .with_quick_replies(client, host, QuickReplyState::Idle(coordinates)),
                     )
                     .await;
             }
@@ -99,7 +100,7 @@ impl LineClient {
                     MessageContent::text(&text_message).with_quick_replies(
                         client,
                         host,
-                        QuickReplyState::ActiveDraw,
+                        QuickReplyState::ActiveDraw(None),
                     )
                 })
                 .unwrap_or_else(|| {
@@ -185,6 +186,7 @@ impl Agent for LineClient {
         client: &Client,
         firebase_client: &T,
         host: &str,
+        coordinates: &Option<Coordinates>,
     ) {
         let (jar, draw) = get_current_draw(client, firebase_client).await;
         match draw {
@@ -195,7 +197,11 @@ impl Agent for LineClient {
                         .map(|res| {
                             res.map(|draw| {
                                 MessageContent::text(&format!("「{}」が出ました", draw.name))
-                                    .with_quick_replies(client, host, QuickReplyState::ActiveDraw)
+                                    .with_quick_replies(
+                                        client,
+                                        host,
+                                        QuickReplyState::ActiveDraw(coordinates.clone()),
+                                    )
                             })
                             .unwrap_or_else(|| {
                                 MessageContent::text("何も出ませんでした").with_quick_replies(
@@ -213,7 +219,11 @@ impl Agent for LineClient {
                         .send_to_all_users(
                             client,
                             MessageContent::text(&format!("「{}」が既に出ています", draw.name))
-                                .with_quick_replies(client, host, QuickReplyState::ActiveDraw),
+                                .with_quick_replies(
+                                    client,
+                                    host,
+                                    QuickReplyState::ActiveDraw(coordinates.clone()),
+                                ),
                         )
                         .await;
                 }
@@ -231,6 +241,7 @@ impl Agent for LineClient {
         client: &Client,
         firebase_client: &T,
         host: &str,
+        coordinates: Option<Coordinates>,
     ) {
         let (jar, draw) = get_current_draw(client, firebase_client).await;
         match draw {
@@ -246,7 +257,11 @@ impl Agent for LineClient {
                         .send_to_all_users(
                             client,
                             MessageContent::text(&format!("{}を延期しました", &draw.name))
-                                .with_quick_replies(client, host, QuickReplyState::Idle(None)),
+                                .with_quick_replies(
+                                    client,
+                                    host,
+                                    QuickReplyState::Idle(coordinates),
+                                ),
                         )
                         .await;
                 }
@@ -264,8 +279,9 @@ impl Agent for LineClient {
         client: &Client,
         firebase_client: &T,
         host: &str,
+        coordinates: Option<Coordinates>,
     ) {
-        delete_current(client, self, firebase_client, host, |draw| {
+        delete_current(client, self, firebase_client, host, coordinates, |draw| {
             format!("「{}」を削除しました", &draw)
         })
         .await;
@@ -276,8 +292,9 @@ impl Agent for LineClient {
         client: &Client,
         firebase_client: &T,
         host: &str,
+        coordinates: Option<Coordinates>,
     ) {
-        delete_current(client, self, firebase_client, host, |draw| {
+        delete_current(client, self, firebase_client, host, coordinates, |draw| {
             format!("「{}」は完食になりました", &draw)
         })
         .await;

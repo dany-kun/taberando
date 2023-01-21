@@ -123,9 +123,15 @@ async fn action(line_client: &LineClient, event: &Event, event_type: &str) -> Op
                         UserAction::Draw(meal, coordinates) => {
                             Some(Action::Draw(client, meal, coordinates))
                         }
-                        UserAction::Postpone => Some(Action::PostponeCurrent(client)),
-                        UserAction::DeleteCurrent => Some(Action::RemoveCurrent(client)),
-                        UserAction::ArchiveCurrent => Some(Action::ArchiveCurrent(client)),
+                        UserAction::Postpone(coordinates) => {
+                            Some(Action::PostponeCurrent(client, coordinates))
+                        }
+                        UserAction::DeleteCurrent(coordinates) => {
+                            Some(Action::RemoveCurrent(client, coordinates))
+                        }
+                        UserAction::ArchiveCurrent(coordinates) => {
+                            Some(Action::ArchiveCurrent(client, coordinates))
+                        }
                         UserAction::Add => {
                             println!("Unhandled postback event: {:?}", &event);
                             None

@@ -15,9 +15,9 @@ const REFRESH_ACTION: &str = "refresh_action";
 
 pub enum UserAction {
     Draw(Meal, Option<Coordinates>),
-    Postpone,
-    DeleteCurrent,
-    ArchiveCurrent,
+    Postpone(Option<Coordinates>),
+    DeleteCurrent(Option<Coordinates>),
+    ArchiveCurrent(Option<Coordinates>),
     Add,
     Refresh,
 }
@@ -33,18 +33,34 @@ impl Serialize for UserAction {
                     Meal::Lunch => DRAW_LUNCH_ACTION,
                     Meal::Dinner => DRAW_DINNER_ACTION,
                 };
-                coordinates.as_ref().map_or(path.to_string(), |c| {
-                    format!("{}?lat={}&long={}", path, c.latitude, c.longitude)
-                })
+                path_with_coordinates(path, coordinates)
             }
-            UserAction::Postpone => POSTPONE_ACTION.to_string(),
-            UserAction::DeleteCurrent => DELETE_ACTION.to_string(),
-            UserAction::ArchiveCurrent => ARCHIVE_ACTION.to_string(),
+            UserAction::Postpone(coordinates) => {
+                path_with_coordinates(POSTPONE_ACTION, coordinates)
+            }
+            UserAction::DeleteCurrent(coordinates) => {
+                path_with_coordinates(DELETE_ACTION, coordinates)
+            }
+            UserAction::ArchiveCurrent(coordinates) => {
+                path_with_coordinates(ARCHIVE_ACTION, coordinates)
+            }
             UserAction::Add => ADD_ACTION.to_string(),
             UserAction::Refresh => REFRESH_ACTION.to_string(),
         };
         serializer.serialize_str(relative_url.as_str())
     }
+}
+
+impl Coordinates {
+    fn to_path(&self, path: &str) -> String {
+        format!("{}?lat={}&long={}", path, self.latitude, self.longitude)
+    }
+}
+
+fn path_with_coordinates(path: &str, coordinates: &Option<Coordinates>) -> String {
+    coordinates
+        .as_ref()
+        .map_or(path.to_string(), |c| c.to_path(path))
 }
 
 struct UserActionVisitor;
@@ -71,9 +87,9 @@ impl<'de> Visitor<'de> for UserActionVisitor {
         match url.path().trim_start_matches('/') {
             DRAW_LUNCH_ACTION => Ok(UserAction::Draw(Meal::Lunch, coordinates)),
             DRAW_DINNER_ACTION => Ok(UserAction::Draw(Meal::Dinner, coordinates)),
-            POSTPONE_ACTION => Ok(UserAction::Postpone),
-            DELETE_ACTION => Ok(UserAction::DeleteCurrent),
-            ARCHIVE_ACTION => Ok(UserAction::ArchiveCurrent),
+            POSTPONE_ACTION => Ok(UserAction::Postpone(coordinates)),
+            DELETE_ACTION => Ok(UserAction::DeleteCurrent(coordinates)),
+            ARCHIVE_ACTION => Ok(UserAction::ArchiveCurrent(coordinates)),
             ADD_ACTION => Ok(UserAction::Add),
             REFRESH_ACTION => Ok(UserAction::Refresh),
             v => Err(E::custom(format!("Unknown action value {}", v))),

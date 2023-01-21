@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use crate::app::core::{Client, Meal};
+use crate::app::core::{Client, Coordinates, Meal};
 use crate::gcp::api::FirebaseApi;
 
 #[async_trait]
@@ -18,24 +18,28 @@ pub trait Agent {
         client: &Client,
         firebase_client: &T,
         host: &str,
+        coordinates: &Option<Coordinates>,
     );
     async fn postpone<T: FirebaseApi + Sync>(
         &self,
         client: &Client,
         firebase_client: &T,
         host: &str,
+        coordinates: Option<Coordinates>,
     );
     async fn delete_current<T: FirebaseApi + Sync>(
         &self,
         client: &Client,
         firebase_client: &T,
         host: &str,
+        coordinates: Option<Coordinates>,
     );
     async fn archive_current<T: FirebaseApi + Sync>(
         &self,
         client: &Client,
         firebase_client: &T,
         host: &str,
+        coordinates: Option<Coordinates>,
     );
     async fn add_place<T: FirebaseApi + Sync>(
         &self,

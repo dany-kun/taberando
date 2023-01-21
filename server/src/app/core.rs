@@ -12,9 +12,9 @@ pub enum Client {
 pub enum Action {
     Add(Client, String, Vec<Meal>),
     Draw(Client, Meal, Option<Coordinates>),
-    PostponeCurrent(Client),
-    ArchiveCurrent(Client),
-    RemoveCurrent(Client),
+    PostponeCurrent(Client, Option<Coordinates>),
+    ArchiveCurrent(Client, Option<Coordinates>),
+    RemoveCurrent(Client, Option<Coordinates>),
     Refresh(Client),
     WhoAmI(Client),
     Location(Client, f32, f32),
@@ -71,22 +71,24 @@ pub async fn handle_action<T: FirebaseApi + Sync>(
 ) {
     let (host, action) = action;
     match action {
-        Action::Draw(source, meal, _coordinates) => {
+        Action::Draw(source, meal, coordinates) => {
             line_client
-                .try_draw(meal, &source, firebase_client, &host)
+                .try_draw(meal, &source, firebase_client, &host, &coordinates)
                 .await;
         }
-        Action::PostponeCurrent(source) => {
-            line_client.postpone(&source, firebase_client, &host).await;
-        }
-        Action::RemoveCurrent(source) => {
+        Action::PostponeCurrent(source, coordinates) => {
             line_client
-                .delete_current(&source, firebase_client, &host)
+                .postpone(&source, firebase_client, &host, coordinates)
                 .await;
         }
-        Action::ArchiveCurrent(source) => {
+        Action::RemoveCurrent(source, coordinates) => {
             line_client
-                .archive_current(&source, firebase_client, &host)
+                .delete_current(&source, firebase_client, &host, coordinates)
+                .await;
+        }
+        Action::ArchiveCurrent(source, coordinates) => {
+            line_client
+                .archive_current(&source, firebase_client, &host, coordinates)
                 .await;
         }
         Action::Refresh(source) => {
