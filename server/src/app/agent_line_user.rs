@@ -30,6 +30,7 @@ impl Client {
         let add_place = self.add_place_quick_reply(host);
         vec![
             add_place,
+            MessageContent::location_quick_reply("location", None),
             MessageContent::postback_quick_reply("🎲 昼", json::DRAW_LUNCH_ACTION, None),
             MessageContent::postback_quick_reply("🎲 夜", json::DRAW_DINNER_ACTION, None),
         ]
@@ -39,6 +40,7 @@ impl Client {
         let add_place = self.add_place_quick_reply(host);
         vec![
             add_place,
+            MessageContent::location_quick_reply("location", None),
             MessageContent::postback_quick_reply("✓ 完", json::ARCHIVE_ACTION, None),
             MessageContent::postback_quick_reply("📅 延", json::POSTPONE_ACTION, None),
             MessageContent::postback_quick_reply("❌ 削", json::DELETE_ACTION, None),

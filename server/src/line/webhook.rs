@@ -92,7 +92,7 @@ async fn parse_webhook_events(line_client: LineClient, payload: Payload) -> Vec<
             "active" => {
                 let event_type = event.event_type.as_str();
                 println!("{:?}", event_type);
-                action(&line_client, event.clone(), event_type).await
+                action(&line_client, &event, event_type).await
             }
             _ => {
                 println!("Unknown event mode {:?}", mode);
@@ -110,49 +110,38 @@ async fn parse_webhook_events(line_client: LineClient, payload: Payload) -> Vec<
 
 async fn action(
     line_client: &LineClient,
-    event: Event,
+    event: &Event,
     event_type: &str,
 ) -> Option<app::core::Action> {
     match event_type {
         "join" => {
-            let _ = bot::setup(line_client, event.source).await;
+            let _ = bot::setup(line_client, &event.source).await;
         }
         "follow" => {
-            let _ = bot::setup(line_client, event.source).await;
+            let _ = bot::setup(line_client, &event.source).await;
         }
-        "message" => {
-            let command = event
-                .message
-                .filter(|m| m.message_type == "text")
-                .and_then(|m| m.text)?
-                .to_lowercase();
-
-            return if let Some(c) = event.source.to_client() {
-                match command.trim().to_lowercase().as_str() {
-                    "refresh" => Some(app::core::Action::Refresh(c)),
-                    "whoami" => Some(app::core::Action::WhoAmI(c)),
-                    _ => None,
-                }
-            } else {
-                None
-            };
-        }
+        "message" => return message_to_action(event),
         "postback" => {
-            if let Some(postback) = event.postback {
+            if let Some(postback) = event.postback.as_ref().and_then(|p| p.data_url().ok()) {
                 if let Some(client) = event.source.to_client() {
-                    return match postback.data.as_str() {
-                        json::DRAW_LUNCH_ACTION => {
-                            Some(app::core::Action::Draw(client, app::core::Meal::Lunch))
-                        }
-                        json::DRAW_DINNER_ACTION => {
-                            Some(app::core::Action::Draw(client, app::core::Meal::Dinner))
-                        }
+                    let coordinates = postback.coordinates();
+                    return match postback.path().trim_start_matches('/') {
+                        json::DRAW_LUNCH_ACTION => Some(app::core::Action::Draw(
+                            client,
+                            app::core::Meal::Lunch,
+                            coordinates,
+                        )),
+                        json::DRAW_DINNER_ACTION => Some(app::core::Action::Draw(
+                            client,
+                            app::core::Meal::Dinner,
+                            coordinates,
+                        )),
                         json::POSTPONE_ACTION => Some(app::core::Action::PostponeCurrent(client)),
                         json::DELETE_ACTION => Some(app::core::Action::RemoveCurrent(client)),
                         json::ARCHIVE_ACTION => Some(app::core::Action::ArchiveCurrent(client)),
                         json::REFRESH_ACTION => Some(app::core::Action::Refresh(client)),
                         _ => {
-                            println!("Unhandled postback: {}", postback.data);
+                            println!("Unhandled postback event: {:?}", &event);
                             None
                         }
                     };
@@ -165,4 +154,22 @@ async fn action(
     }
     #[allow(clippy::needless_return)]
     return Option::None;
+}
+
+fn message_to_action(event: &Event) -> Option<Action> {
+    let message = event.message.as_ref()?;
+    let client = event.source.to_client()?;
+    match message.message_type.as_str() {
+        "text" => match message.text.as_ref()?.to_lowercase().trim() {
+            "refresh" => Some(app::core::Action::Refresh(client)),
+            "whoami" => Some(app::core::Action::WhoAmI(client)),
+            _ => None,
+        },
+        "location" => {
+            println!("{:?}", message.latitude);
+            println!("{:?}", message.longitude);
+            None
+        }
+        _ => None,
+    }
 }
