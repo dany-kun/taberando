@@ -66,7 +66,7 @@ pub struct QuickReplyAction {
 
 pub enum QuickReplyState {
     Idle(Option<Coordinates>),
-    ActiveDraw,
+    ActiveDraw(Option<Coordinates>),
     NoShops,
 }
 
@@ -147,12 +147,24 @@ impl MessageContent {
                     None,
                 ),
             ],
-            QuickReplyState::ActiveDraw => vec![
+            QuickReplyState::ActiveDraw(coordinates) => vec![
                 client.add_place_quick_reply(host),
                 // MessageContent::location_quick_reply("location", None),
-                MessageContent::postback_quick_reply("✓ 完", &UserAction::ArchiveCurrent, None),
-                MessageContent::postback_quick_reply("📅 延", &UserAction::Postpone, None),
-                MessageContent::postback_quick_reply("❌ 削", &UserAction::DeleteCurrent, None),
+                MessageContent::postback_quick_reply(
+                    "✓ 完",
+                    &UserAction::ArchiveCurrent(coordinates.clone()),
+                    None,
+                ),
+                MessageContent::postback_quick_reply(
+                    "📅 延",
+                    &UserAction::Postpone(coordinates.clone()),
+                    None,
+                ),
+                MessageContent::postback_quick_reply(
+                    "❌ 削",
+                    &UserAction::DeleteCurrent(coordinates),
+                    None,
+                ),
             ],
             QuickReplyState::NoShops => vec![client.add_place_quick_reply(host)],
         };
