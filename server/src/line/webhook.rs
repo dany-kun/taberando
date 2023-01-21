@@ -4,10 +4,9 @@ use warp::http::{HeaderMap, StatusCode};
 use warp::hyper::body::Bytes;
 use warp::{Filter, Rejection, Reply};
 
-use crate::app;
 use crate::app::core::Action;
+use crate::app::user_action::UserAction;
 use crate::line::http::LineClient;
-use crate::line::json;
 use crate::line::json::{Event, Payload};
 
 use super::bot;
@@ -49,7 +48,7 @@ pub fn route(
                 std::str::from_utf8(&payload)
                     .map_err(|_| warp::reject::custom(InvalidWebhookError))
                     .and_then(|text| {
-                        let signature = ring::hmac::sign(&key, text.as_bytes());
+                        let signature = hmac::sign(&key, text.as_bytes());
                         let encoded = base64::encode(signature.as_ref());
                         if header == encoded {
                             serde_json::from_str::<Payload>(text)
@@ -83,8 +82,8 @@ pub fn route(
         )
 }
 
-async fn parse_webhook_events(line_client: LineClient, payload: Payload) -> Vec<app::core::Action> {
-    let mut vec: Vec<app::core::Action> = Vec::new();
+async fn parse_webhook_events(line_client: LineClient, payload: Payload) -> Vec<Action> {
+    let mut vec: Vec<Action> = Vec::new();
     for event in payload.events {
         let mode = event.clone().mode;
         println!("{:?}", mode);
@@ -96,7 +95,7 @@ async fn parse_webhook_events(line_client: LineClient, payload: Payload) -> Vec<
             }
             _ => {
                 println!("Unknown event mode {:?}", mode);
-                Option::None
+                None
             }
         };
         match action {
@@ -108,11 +107,7 @@ async fn parse_webhook_events(line_client: LineClient, payload: Payload) -> Vec<
     return vec;
 }
 
-async fn action(
-    line_client: &LineClient,
-    event: &Event,
-    event_type: &str,
-) -> Option<app::core::Action> {
+async fn action(line_client: &LineClient, event: &Event, event_type: &str) -> Option<Action> {
     match event_type {
         "join" => {
             let _ = bot::setup(line_client, &event.source).await;
@@ -122,28 +117,20 @@ async fn action(
         }
         "message" => return message_to_action(event),
         "postback" => {
-            if let Some(postback) = event.postback.as_ref().and_then(|p| p.data_url().ok()) {
-                if let Some(client) = event.source.to_client() {
-                    let coordinates = postback.coordinates();
-                    return match postback.path().trim_start_matches('/') {
-                        json::DRAW_LUNCH_ACTION => Some(app::core::Action::Draw(
-                            client,
-                            app::core::Meal::Lunch,
-                            coordinates,
-                        )),
-                        json::DRAW_DINNER_ACTION => Some(app::core::Action::Draw(
-                            client,
-                            app::core::Meal::Dinner,
-                            coordinates,
-                        )),
-                        json::POSTPONE_ACTION => Some(app::core::Action::PostponeCurrent(client)),
-                        json::DELETE_ACTION => Some(app::core::Action::RemoveCurrent(client)),
-                        json::ARCHIVE_ACTION => Some(app::core::Action::ArchiveCurrent(client)),
-                        json::REFRESH_ACTION => Some(app::core::Action::Refresh(client)),
-                        _ => {
+            if let (Some(client), Some(postback)) = (event.source.to_client(), &event.postback) {
+                if let Ok(user_action) = serde_json::from_str(postback.data.as_str()) {
+                    return match user_action {
+                        UserAction::Draw(meal, coordinates) => {
+                            Some(Action::Draw(client, meal, coordinates))
+                        }
+                        UserAction::Postpone => Some(Action::PostponeCurrent(client)),
+                        UserAction::DeleteCurrent => Some(Action::RemoveCurrent(client)),
+                        UserAction::ArchiveCurrent => Some(Action::ArchiveCurrent(client)),
+                        UserAction::Add => {
                             println!("Unhandled postback event: {:?}", &event);
                             None
                         }
+                        UserAction::Refresh => Some(Action::Refresh(client)),
                     };
                 }
             }
@@ -153,7 +140,7 @@ async fn action(
         }
     }
     #[allow(clippy::needless_return)]
-    return Option::None;
+    return None;
 }
 
 fn message_to_action(event: &Event) -> Option<Action> {
@@ -161,14 +148,16 @@ fn message_to_action(event: &Event) -> Option<Action> {
     let client = event.source.to_client()?;
     match message.message_type.as_str() {
         "text" => match message.text.as_ref()?.to_lowercase().trim() {
-            "refresh" => Some(app::core::Action::Refresh(client)),
-            "whoami" => Some(app::core::Action::WhoAmI(client)),
+            "refresh" => Some(Action::Refresh(client)),
+            "whoami" => Some(Action::WhoAmI(client)),
             _ => None,
         },
         "location" => {
-            println!("{:?}", message.latitude);
-            println!("{:?}", message.longitude);
-            None
+            if let (Some(lat), Some(long)) = (message.latitude, message.longitude) {
+                Some(Action::Location(client, lat, long))
+            } else {
+                None
+            }
         }
         _ => None,
     }

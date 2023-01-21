@@ -45,4 +45,6 @@ pub trait Agent {
         meals: Vec<Meal>,
         host: &str,
     );
+
+    async fn update_location(&self, client: &Client, host: &str, latitude: f32, longitude: f32);
 }

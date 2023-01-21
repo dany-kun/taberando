@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
 use crate::app::agent::Agent;
-use crate::app::core::{Client, Meal, Place};
+use crate::app::core::{Client, Coordinates, Meal, Place};
 use crate::gcp::api::{FirebaseApi, Jar};
 use crate::http::{Empty, HttpResult};
 use crate::line::http::{LineChannel, LineClient};
@@ -69,7 +69,7 @@ async fn delete_current<F: FnOnce(String) -> String, T: FirebaseApi + Sync>(
                     .send_to_all_users(
                         client,
                         MessageContent::text(&message_formatter(drawn_place_name.clone()))
-                            .with_quick_replies(client, host, QuickReplyState::Idle),
+                            .with_quick_replies(client, host, QuickReplyState::Idle(None)),
                     )
                     .await;
             }
@@ -106,7 +106,7 @@ impl LineClient {
                     MessageContent::text(&text_message).with_quick_replies(
                         client,
                         host,
-                        QuickReplyState::Idle,
+                        QuickReplyState::Idle(None),
                     )
                 })
             })
@@ -246,7 +246,7 @@ impl Agent for LineClient {
                         .send_to_all_users(
                             client,
                             MessageContent::text(&format!("{}を延期しました", &draw.name))
-                                .with_quick_replies(client, host, QuickReplyState::Idle),
+                                .with_quick_replies(client, host, QuickReplyState::Idle(None)),
                         )
                         .await;
                 }
@@ -306,5 +306,21 @@ impl Agent for LineClient {
                     .await;
             }
         }
+    }
+
+    async fn update_location(&self, client: &Client, host: &str, latitude: f32, longitude: f32) {
+        let _ = self
+            .send_to_all_users(
+                client,
+                MessageContent::text("位置取得済み").with_quick_replies(
+                    client,
+                    host,
+                    QuickReplyState::Idle(Some(Coordinates {
+                        latitude,
+                        longitude,
+                    })),
+                ),
+            )
+            .await;
     }
 }
