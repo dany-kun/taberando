@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::app::core::{Client, Coordinates};
+use crate::app::core::Client;
 use crate::http::HttpResult;
 use crate::line::http::{LineChannel, LineClient};
 
@@ -19,52 +19,6 @@ pub struct EventSource {
 #[derive(Debug, Deserialize, Clone)]
 pub struct Postback {
     pub(crate) data: String,
-}
-
-pub struct PostbackUrl(reqwest::Url);
-
-impl From<reqwest::Url> for PostbackUrl {
-    fn from(value: reqwest::Url) -> Self {
-        PostbackUrl(value)
-    }
-}
-
-impl Postback {
-    pub fn data_url(&self) -> Result<PostbackUrl, Box<dyn std::error::Error>> {
-        let base_url = reqwest::Url::parse("taberando://postback")?;
-        base_url
-            .join(self.data.as_str())
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
-            .map(|p| p.into())
-    }
-}
-
-impl PostbackUrl {
-    pub(crate) fn path(&self) -> &str {
-        self.0.path().trim_start_matches('/')
-    }
-
-    pub fn coordinates(&self) -> Option<Coordinates> {
-        let mut latitude = None;
-        let mut longitude = None;
-        for (k, v) in self.0.query_pairs() {
-            match k.as_ref() {
-                "latitude" => {
-                    latitude = v.parse::<f32>().ok();
-                }
-                "longitude" => {
-                    longitude = v.parse::<f32>().ok();
-                }
-                _ => {}
-            }
-        }
-        latitude.and_then(|lat| {
-            longitude.map(|lng| Coordinates {
-                latitude: lat,
-                longitude: lng,
-            })
-        })
-    }
 }
 
 impl EventSource {

@@ -17,6 +17,7 @@ pub enum Action {
     RemoveCurrent(Client),
     Refresh(Client),
     WhoAmI(Client),
+    Location(Client, f32, f32),
 }
 
 #[derive(Debug, Clone)]
@@ -97,6 +98,11 @@ pub async fn handle_action<T: FirebaseApi + Sync>(
         Action::Add(source, place_name, meals) => {
             line_client
                 .add_place(&source, firebase_client, &place_name, meals, &host)
+                .await;
+        }
+        Action::Location(source, latitude, longitude) => {
+            line_client
+                .update_location(&source, &host, latitude, longitude)
                 .await;
         }
     }

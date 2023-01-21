@@ -1,18 +1,11 @@
 use std::fmt::Debug;
 
 use crate::app;
+use crate::app::core::{Coordinates, Meal};
+use crate::app::user_action::UserAction;
 use serde::{Deserialize, Serialize};
 
 use crate::line::bot::{EventSource, Postback};
-use crate::line::json;
-
-pub const DRAW_LUNCH_ACTION: &str = "lunch_action";
-pub const DRAW_DINNER_ACTION: &str = "dinner_action";
-pub const POSTPONE_ACTION: &str = "postpone_action";
-pub const DELETE_ACTION: &str = "delete_action";
-pub const ARCHIVE_ACTION: &str = "archive_action";
-pub const ADD_ACTION: &str = "add_action";
-pub const REFRESH_ACTION: &str = "refresh_action";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Message {
@@ -72,7 +65,7 @@ pub struct QuickReplyAction {
 }
 
 pub enum QuickReplyState {
-    Idle,
+    Idle(Option<Coordinates>),
     ActiveDraw,
     NoShops,
 }
@@ -80,16 +73,17 @@ pub enum QuickReplyState {
 impl MessageContent {
     pub(crate) fn postback_quick_reply(
         label: &str,
-        data: &str,
+        data: &UserAction,
         icon: Option<String>,
     ) -> QuickReply {
+        let serialized_action = serde_json::to_string(data).unwrap();
         QuickReply {
             quick_reply_type: "action".to_string(),
             image_url: icon,
             action: QuickReplyAction {
                 quick_reply_action_type: "postback".to_string(),
                 label: label.to_string(),
-                data: Some(data.to_string()),
+                data: Some(serialized_action),
                 uri: None,
             },
         }
@@ -139,18 +133,26 @@ impl MessageContent {
         quick_reply_state: QuickReplyState,
     ) -> MessageContent {
         let replies = match quick_reply_state {
-            QuickReplyState::Idle => vec![
+            QuickReplyState::Idle(coordinates) => vec![
                 client.add_place_quick_reply(host),
                 // MessageContent::location_quick_reply("location", None),
-                MessageContent::postback_quick_reply("🎲 昼", json::DRAW_LUNCH_ACTION, None),
-                MessageContent::postback_quick_reply("🎲 夜", json::DRAW_DINNER_ACTION, None),
+                MessageContent::postback_quick_reply(
+                    "🎲 昼",
+                    &UserAction::Draw(Meal::Lunch, coordinates.clone()),
+                    None,
+                ),
+                MessageContent::postback_quick_reply(
+                    "🎲 夜",
+                    &UserAction::Draw(Meal::Dinner, coordinates),
+                    None,
+                ),
             ],
             QuickReplyState::ActiveDraw => vec![
                 client.add_place_quick_reply(host),
                 // MessageContent::location_quick_reply("location", None),
-                MessageContent::postback_quick_reply("✓ 完", ARCHIVE_ACTION, None),
-                MessageContent::postback_quick_reply("📅 延", POSTPONE_ACTION, None),
-                MessageContent::postback_quick_reply("❌ 削", DELETE_ACTION, None),
+                MessageContent::postback_quick_reply("✓ 完", &UserAction::ArchiveCurrent, None),
+                MessageContent::postback_quick_reply("📅 延", &UserAction::Postpone, None),
+                MessageContent::postback_quick_reply("❌ 削", &UserAction::DeleteCurrent, None),
             ],
             QuickReplyState::NoShops => vec![client.add_place_quick_reply(host)],
         };

@@ -18,8 +18,6 @@ pub enum LineChannel {
 #[derive(Clone)]
 pub struct LineClient(pub(crate) reqwest::Client);
 
-impl LineClient {}
-
 impl LineClient {
     pub async fn send_to(&self, id: &str, message: MessageContent) -> HttpResult<Empty> {
         self.send_messages(&Message {
