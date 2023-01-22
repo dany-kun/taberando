@@ -64,25 +64,27 @@ pub struct QuickReplyAction {
     pub(crate) uri: Option<String>,
 }
 
+#[derive(Debug, Clone)]
 pub enum QuickReplyState {
     Idle(Option<Coordinates>),
     ActiveDraw(Option<Coordinates>),
     NoShops,
 }
 
+const LOCATION_ICON_URL: &str = "https://cdn.iconscout.com/icon/free/png-256/pin-191-119557.png";
+
 impl MessageContent {
     pub(crate) fn postback_quick_reply(
-        label: &str,
-        data: &UserAction,
+        user_action: &UserAction,
         icon: Option<String>,
     ) -> QuickReply {
-        let serialized_action = serde_json::to_string(data).unwrap();
+        let serialized_action = serde_json::to_string(user_action).unwrap();
         QuickReply {
             quick_reply_type: "action".to_string(),
             image_url: icon,
             action: QuickReplyAction {
                 quick_reply_action_type: "postback".to_string(),
-                label: label.to_string(),
+                label: user_action.label(),
                 data: Some(serialized_action),
                 uri: None,
             },
@@ -102,11 +104,10 @@ impl MessageContent {
         }
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn location_quick_reply(label: &str, icon: Option<String>) -> QuickReply {
+    pub(crate) fn location_quick_reply(label: &str) -> QuickReply {
         QuickReply {
             quick_reply_type: "action".to_string(),
-            image_url: icon,
+            image_url: Some(LOCATION_ICON_URL.to_string()),
             action: QuickReplyAction {
                 quick_reply_action_type: "location".to_string(),
                 label: label.to_string(),
@@ -114,6 +115,13 @@ impl MessageContent {
                 uri: None,
             },
         }
+    }
+
+    pub(crate) fn clear_location_quick_reply() -> QuickReply {
+        MessageContent::postback_quick_reply(
+            &UserAction::ClearLocation,
+            Some(LOCATION_ICON_URL.to_string()),
+        )
     }
 
     pub(crate) fn text(message: &str) -> MessageContent {
@@ -133,38 +141,36 @@ impl MessageContent {
         quick_reply_state: QuickReplyState,
     ) -> MessageContent {
         let replies = match quick_reply_state {
-            QuickReplyState::Idle(coordinates) => vec![
-                client.add_place_quick_reply(host),
-                // MessageContent::location_quick_reply("location", None),
-                MessageContent::postback_quick_reply(
-                    "🎲 昼",
-                    &UserAction::Draw(Meal::Lunch, coordinates.clone()),
-                    None,
-                ),
-                MessageContent::postback_quick_reply(
-                    "🎲 夜",
-                    &UserAction::Draw(Meal::Dinner, coordinates),
-                    None,
-                ),
-            ],
+            QuickReplyState::Idle(coordinates) => {
+                let mut base = vec![
+                    client.add_place_quick_reply(host),
+                    MessageContent::postback_quick_reply(
+                        &UserAction::Draw(Meal::Lunch, coordinates.clone()),
+                        None,
+                    ),
+                    MessageContent::postback_quick_reply(
+                        &UserAction::Draw(Meal::Dinner, coordinates.clone()),
+                        None,
+                    ),
+                    MessageContent::location_quick_reply("決"),
+                ];
+                if coordinates.is_some() {
+                    base.push(MessageContent::clear_location_quick_reply());
+                }
+                base
+            }
             QuickReplyState::ActiveDraw(coordinates) => vec![
                 client.add_place_quick_reply(host),
                 // MessageContent::location_quick_reply("location", None),
                 MessageContent::postback_quick_reply(
-                    "✓ 完",
                     &UserAction::ArchiveCurrent(coordinates.clone()),
                     None,
                 ),
                 MessageContent::postback_quick_reply(
-                    "📅 延",
                     &UserAction::Postpone(coordinates.clone()),
                     None,
                 ),
-                MessageContent::postback_quick_reply(
-                    "❌ 削",
-                    &UserAction::DeleteCurrent(coordinates),
-                    None,
-                ),
+                MessageContent::postback_quick_reply(&UserAction::DeleteCurrent(coordinates), None),
             ],
             QuickReplyState::NoShops => vec![client.add_place_quick_reply(host)],
         };

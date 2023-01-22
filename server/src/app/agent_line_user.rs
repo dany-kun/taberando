@@ -340,4 +340,17 @@ impl Agent for LineClient {
             )
             .await;
     }
+
+    async fn clear_location(&self, client: &Client, host: &str) {
+        let _ = self
+            .send_to_all_users(
+                client,
+                MessageContent::text("位置を消しました").with_quick_replies(
+                    client,
+                    host,
+                    QuickReplyState::Idle(None),
+                ),
+            )
+            .await;
+    }
 }

@@ -132,6 +132,7 @@ async fn action(line_client: &LineClient, event: &Event, event_type: &str) -> Op
                         UserAction::ArchiveCurrent(coordinates) => {
                             Some(Action::ArchiveCurrent(client, coordinates))
                         }
+                        UserAction::ClearLocation => Some(Action::ClearLocation(client)),
                         UserAction::Add => {
                             println!("Unhandled postback event: {:?}", &event);
                             None
