@@ -12,6 +12,7 @@ const DELETE_ACTION: &str = "delete_action";
 const ARCHIVE_ACTION: &str = "archive_action";
 const ADD_ACTION: &str = "add_action";
 const REFRESH_ACTION: &str = "refresh_action";
+const CLEAR_LOCATION_ACTION: &str = "clear_location_action";
 
 pub enum UserAction {
     Draw(Meal, Option<Coordinates>),
@@ -19,7 +20,40 @@ pub enum UserAction {
     DeleteCurrent(Option<Coordinates>),
     ArchiveCurrent(Option<Coordinates>),
     Add,
+    ClearLocation,
     Refresh,
+}
+
+impl UserAction {
+    const SUFFIX_COORDINATES: &str = "📍";
+    const LABEL_DRAW_LUNCH: &str = "🎲 昼";
+    const LABEL_DRAW_DINNER: &str = "🎲 夜";
+    const LABEL_POSTPONE: &str = "📅 延";
+    const LABEL_DELETE_CURRENT: &str = "❌ 削";
+    const LABEL_ARCHIVE_CURRENT: &str = "✓ 完";
+    const LABEL_ADD: &str = "+ 加";
+    const LABEL_CLEAR_LOCATION: &str = "消";
+
+    pub fn label(&self) -> String {
+        match self {
+            UserAction::Draw(meal, coordinates) => match (meal, coordinates) {
+                (Meal::Lunch, Some(_)) => {
+                    format!("{}{}", Self::LABEL_DRAW_LUNCH, Self::SUFFIX_COORDINATES)
+                }
+                (Meal::Lunch, None) => Self::LABEL_DRAW_LUNCH.to_string(),
+                (Meal::Dinner, Some(_)) => {
+                    format!("{}{}", Self::LABEL_DRAW_DINNER, Self::SUFFIX_COORDINATES)
+                }
+                (Meal::Dinner, None) => Self::LABEL_DRAW_DINNER.to_string(),
+            },
+            UserAction::Postpone(_) => Self::LABEL_POSTPONE.to_string(),
+            UserAction::DeleteCurrent(_) => Self::LABEL_DELETE_CURRENT.to_string(),
+            UserAction::ArchiveCurrent(_) => Self::LABEL_ARCHIVE_CURRENT.to_string(),
+            UserAction::Add => Self::LABEL_ADD.to_string(),
+            UserAction::Refresh => panic!("No quick reply for refresh"),
+            UserAction::ClearLocation => Self::LABEL_CLEAR_LOCATION.to_string(),
+        }
+    }
 }
 
 impl Serialize for UserAction {
@@ -46,6 +80,7 @@ impl Serialize for UserAction {
             }
             UserAction::Add => ADD_ACTION.to_string(),
             UserAction::Refresh => REFRESH_ACTION.to_string(),
+            UserAction::ClearLocation => CLEAR_LOCATION_ACTION.to_string(),
         };
         serializer.serialize_str(relative_url.as_str())
     }
@@ -92,6 +127,7 @@ impl<'de> Visitor<'de> for UserActionVisitor {
             ARCHIVE_ACTION => Ok(UserAction::ArchiveCurrent(coordinates)),
             ADD_ACTION => Ok(UserAction::Add),
             REFRESH_ACTION => Ok(UserAction::Refresh),
+            CLEAR_LOCATION_ACTION => Ok(UserAction::ClearLocation),
             v => Err(E::custom(format!("Unknown action value {}", v))),
         }
     }

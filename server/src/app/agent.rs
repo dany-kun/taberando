@@ -51,4 +51,6 @@ pub trait Agent {
     );
 
     async fn update_location(&self, client: &Client, host: &str, latitude: f32, longitude: f32);
+
+    async fn clear_location(&self, client: &Client, host: &str);
 }
