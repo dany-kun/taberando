@@ -32,7 +32,7 @@ pub trait LineApi {
     async fn send_messages(&self, message: &Message) -> HttpResult<Empty>;
 
     fn api_url(path: &str) -> String {
-        format!("{}/{}", BASE_LINE_URL, path)
+        format!("{BASE_LINE_URL}/{path}")
     }
 
     async fn set_rich_menu_from_alias(
@@ -49,8 +49,8 @@ pub trait LineApi {
 impl LineApi for LineClient {
     async fn set_rich_menu(&self, rich_menu_id: &str, user_id: Option<&str>) -> HttpResult<Empty> {
         let path = match user_id {
-            Some(id) => format!("user/{}/richmenu/{}", id, rich_menu_id),
-            None => format!("user/all/richmenu/{}", rich_menu_id),
+            Some(id) => format!("user/{id}/richmenu/{rich_menu_id}"),
+            None => format!("user/all/richmenu/{rich_menu_id}"),
         };
         self.make_json_request(|client| client.post(Self::api_url(path.as_str())))
             .await
@@ -78,7 +78,7 @@ impl LineApi for LineClient {
     async fn get_rich_menu_id_from_alias(&self, alias: &str) -> HttpResult<String> {
         let response: HashMap<String, String> = self
             .make_json_request(|client| {
-                client.get(Self::api_url(&format!("richmenu/alias/{}", alias)))
+                client.get(Self::api_url(&format!("richmenu/alias/{alias}")))
             })
             .await?;
         let menu_id = response.get("richMenuId").ok_or(ApiError::Unknown {
@@ -93,10 +93,7 @@ impl LineApi for LineClient {
             .await?;
 
         let menu_id = menu.rich_menu_id;
-        let menu_url = format!(
-            "https://api-data.line.me/v2/bot/richmenu/{}/content",
-            menu_id
-        );
+        let menu_url = format!("https://api-data.line.me/v2/bot/richmenu/{menu_id}/content");
         let _: Empty = self
             .make_json_request(|client| {
                 client
@@ -110,14 +107,14 @@ impl LineApi for LineClient {
 
     async fn delete_rich_menu(&self, menu_id: &str) -> HttpResult<Empty> {
         self.make_json_request(|client| {
-            client.delete(Self::api_url(format!("richmenu/{}", menu_id).as_str()))
+            client.delete(Self::api_url(format!("richmenu/{menu_id}").as_str()))
         })
         .await
     }
 
     async fn get_default_menu(&self, user_id: Option<&str>) -> HttpResult<String> {
         self.make_json_request(|client| match user_id {
-            Some(id) => client.get(Self::api_url(format!("user/{}/richmenu", id).as_str())),
+            Some(id) => client.get(Self::api_url(format!("user/{id}/richmenu").as_str())),
             None => client.get(Self::api_url("user/all/richmenu")),
         })
         .await
@@ -125,7 +122,7 @@ impl LineApi for LineClient {
     }
 
     async fn update_line_webhook_url(&self, url: &str) -> HttpResult<Empty> {
-        let server_webhook_url = format!("{}/line/webhook", url);
+        let server_webhook_url = format!("{url}/line/webhook");
         let payload = WebHookPayload {
             endpoint: server_webhook_url,
         };

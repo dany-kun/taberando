@@ -181,7 +181,7 @@ impl MessageContent {
     pub(crate) fn error_message<E: Debug>(error: &E) -> MessageContent {
         MessageContent {
             message_type: "text".to_string(),
-            text: Some(format!("Error {:?}", error)),
+            text: Some(format!("Error {error:?}")),
             quick_replies: None,
             latitude: None,
             longitude: None,

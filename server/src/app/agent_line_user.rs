@@ -2,6 +2,8 @@ use async_trait::async_trait;
 
 use crate::app::agent::Agent;
 use crate::app::core::{Client, Coordinates, Meal, Place};
+use crate::bing;
+use crate::bing::http::BingClient;
 use crate::gcp::api::{FirebaseApi, Jar};
 use crate::http::{Empty, HttpResult};
 use crate::line::http::{LineChannel, LineClient};
@@ -25,10 +27,8 @@ impl Client {
                 LineChannel::Group { id, .. } => ("group", id),
             },
         };
-        let path_and_query = format!(
-            "/line/draw?source=line&source_type={}&source_id={}",
-            source_type, source_id
-        );
+        let path_and_query =
+            format!("/line/draw?source=line&source_type={source_type}&source_id={source_id}");
         let uri = warp::http::uri::Uri::builder()
             .scheme("https")
             .authority(host)
@@ -130,7 +130,7 @@ impl LineClient {
 
         match to {
             None => {
-                println!("Could not send to a single user for {:?}", line);
+                println!("Could not send to a single user for {line:?}");
                 Ok(Empty {})
             }
             Some(user_id) => self.send_to(user_id, message).await,
@@ -175,7 +175,7 @@ impl Agent for LineClient {
         // Add count
         self.refresh(client, firebase_client, host, |draw| match draw {
             None => "無予定".to_string(),
-            Some(draw) => format!("予定中:{}", draw),
+            Some(draw) => format!("予定中:{draw}"),
         })
         .await;
     }
@@ -307,10 +307,10 @@ impl Agent for LineClient {
         place_name: &str,
         meals: Vec<Meal>,
         host: &str,
-    ) {
+    ) -> HttpResult<Place> {
         let jar: Jar = client.into();
         let result = firebase_client.add_place(&jar, place_name, &meals).await;
-        match result {
+        match &result {
             Ok(_) => {
                 self.refresh(client, firebase_client, host, |_| {
                     "新しい店が追加されました".to_string()
@@ -320,6 +320,38 @@ impl Agent for LineClient {
             Err(e) => {
                 let _ = self
                     .send_to_single_user(client, MessageContent::error_message(&e))
+                    .await;
+            }
+        }
+        result
+    }
+
+    async fn add_place_coordinates<T: FirebaseApi + Sync>(
+        &self,
+        client: &Client,
+        firebase_client: &T,
+        place: &Place,
+        host: &str,
+        bing_client: BingClient,
+    ) {
+        let coordinates = bing_client
+            .find_geo_coordinates_from_query(&place.name, &bing::http::get_bing_context())
+            .await;
+        match coordinates {
+            Ok(coordinates) => {
+                let jar: Jar = client.into();
+                let _ = firebase_client
+                    .set_place_coordinates(&jar, place, &coordinates)
+                    .await;
+                self.refresh(client, firebase_client, host, |_| {
+                    "店の位置は見つかりました。".to_string()
+                })
+                .await;
+            }
+            Err(_) => {
+                let message = format!("{}の位置は見つかりませんでした。", place.name).to_string();
+                let _ = self
+                    .send_to_single_user(client, MessageContent::text(&message))
                     .await;
             }
         }

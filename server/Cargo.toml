@@ -17,6 +17,10 @@ path = "src/bin/local_tunnel.rs"
 name = "migration_v2"
 path = "src/bin/migration_v2.rs"
 
+[[bin]]
+name = "geo_location"
+path = "src/bin/geo_location.rs"
+
 [build-dependencies]
 serde_json = "1.0.74"
 

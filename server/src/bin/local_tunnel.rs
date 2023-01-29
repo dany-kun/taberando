@@ -25,7 +25,7 @@ fn open_local_url(port: i32, line_token: String) {
         .arg("stdout")
         .stdout(Stdio::piped())
         .spawn()
-        .unwrap_or_else(|_| panic!("failed to execute lt opening port process on port {}", port));
+        .unwrap_or_else(|_| panic!("failed to execute lt opening port process on port {port}"));
 
     let out = BufReader::new(child.stdout.unwrap());
 
@@ -41,11 +41,11 @@ fn parse_output(output: String, line_token: &str) {
     match lt_url_regex.captures(&output) {
         Some(matches) => {
             let result = matches.get(1).map_or("", |m| m.as_str()).trim();
-            let scheme_result = format!("https{}", result);
-            println!("Exposing localhost to {}", scheme_result);
+            let scheme_result = format!("https{result}");
+            println!("Exposing localhost to {scheme_result}");
             handle_public_url(line_token, &scheme_result);
         }
-        None => println!("Got unhandled output from lt: \"{}\"", output),
+        None => println!("Got unhandled output from lt: \"{output}\""),
     };
 }
 
