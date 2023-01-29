@@ -116,7 +116,7 @@ impl<'de> Visitor<'de> for UserActionVisitor {
     {
         let base_url = reqwest::Url::parse("taberando://postback").unwrap();
         let url = base_url.join(v).map_err(|_e| {
-            E::custom(format!("A valid relative url path was expected, got {}", v).as_str())
+            E::custom(format!("A valid relative url path was expected, got {v}").as_str())
         })?;
         let coordinates = coordinates(&url);
         match url.path().trim_start_matches('/') {
@@ -128,7 +128,7 @@ impl<'de> Visitor<'de> for UserActionVisitor {
             ADD_ACTION => Ok(UserAction::Add),
             REFRESH_ACTION => Ok(UserAction::Refresh),
             CLEAR_LOCATION_ACTION => Ok(UserAction::ClearLocation),
-            v => Err(E::custom(format!("Unknown action value {}", v))),
+            v => Err(E::custom(format!("Unknown action value {v}"))),
         }
     }
 }

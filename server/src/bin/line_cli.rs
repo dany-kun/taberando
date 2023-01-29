@@ -60,12 +60,12 @@ async fn main() {
             match command {
                 CommandAction::List => {
                     let result = get_http_client(m).get_rich_menus().await.unwrap();
-                    println!("{:?}", result)
+                    println!("{result:?}")
                 }
                 CommandAction::Delete => {
                     let menu_id = m.value_of("id").unwrap();
                     get_http_client(m).delete_rich_menu(menu_id).await.unwrap();
-                    println!("Menu {} deleted", menu_id)
+                    println!("Menu {menu_id} deleted")
                 }
 
                 CommandAction::Create => {
@@ -76,7 +76,7 @@ async fn main() {
                     let image = std::fs::read(image_path).unwrap();
                     let client = get_http_client(m);
                     let result = client.create_rich_menu(&menu, image).await.unwrap();
-                    println!("Created menu {:?}", result);
+                    println!("Created menu {result:?}");
                 }
 
                 CommandAction::Default => {
@@ -84,7 +84,7 @@ async fn main() {
                         .get_default_menu(m.value_of("id"))
                         .await
                         .unwrap();
-                    println!("{}", result)
+                    println!("{result}")
                 }
 
                 CommandAction::SetDefault => {
@@ -98,7 +98,7 @@ async fn main() {
                         "Menu {} set for {}",
                         menu_id,
                         user_id
-                            .map(|user_id| format!("user {}", user_id))
+                            .map(|user_id| format!("user {user_id}"))
                             .unwrap_or_else(|| "default".to_string())
                     )
                 }
@@ -110,7 +110,7 @@ async fn main() {
                         .set_rich_menu_alias(menu_id, alias)
                         .await
                         .unwrap();
-                    println!("Menu alias {} set for menu {}", alias, menu_id)
+                    println!("Menu alias {alias} set for menu {menu_id}")
                 }
             }
         }

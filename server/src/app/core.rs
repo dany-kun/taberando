@@ -44,9 +44,9 @@ impl From<&Client> for Jar {
     fn from(client: &Client) -> Self {
         match client {
             Line(channel) => match channel {
-                LineChannel::User(id) => format!("user_{}", id),
-                LineChannel::Room { id, .. } => format!("room_{}", id),
-                LineChannel::Group { id, .. } => format!("group_{}", id),
+                LineChannel::User(id) => format!("user_{id}"),
+                LineChannel::Room { id, .. } => format!("room_{id}"),
+                LineChannel::Group { id, .. } => format!("group_{id}"),
             },
         }
     }
@@ -116,7 +116,7 @@ pub async fn handle_action<T: FirebaseApi + Sync>(
                         .await;
                 }
                 Err(e) => {
-                    println!("{:?}", e);
+                    println!("{e:?}");
                 }
             }
         }

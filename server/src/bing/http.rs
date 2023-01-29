@@ -38,7 +38,7 @@ impl Error for BingError {}
 
 impl From<reqwest::Error> for BingError {
     fn from(value: reqwest::Error) -> Self {
-        BingError(format!("{:?}", value))
+        BingError(format!("{value:?}"))
     }
 }
 

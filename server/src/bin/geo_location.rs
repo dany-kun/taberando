@@ -32,5 +32,5 @@ async fn main() {
     }
     println!("{:?}", places.len());
     println!("{:?}", results.len());
-    println!("{:?}", results);
+    println!("{results:?}");
 }

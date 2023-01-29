@@ -48,7 +48,7 @@ async fn launch_core_agent<T: FirebaseApi + Sync>(
 ) -> Result<(), &'static str> {
     println!("Receiving");
     while let Some(action) = rx.recv().await {
-        println!("Got action {:?}", action);
+        println!("Got action {action:?}");
         app::core::handle_action(action, line_client, firebase_client).await;
     }
     Result::Ok(())

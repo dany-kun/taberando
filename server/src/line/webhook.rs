@@ -44,7 +44,7 @@ pub fn route(
              header: String,
              payload: Bytes,
              key: hmac::Key| async move {
-                println!("{:?}, {:?}", path, headers);
+                println!("{path:?}, {headers:?}");
                 std::str::from_utf8(&payload)
                     .map_err(|_| warp::reject::custom(InvalidWebhookError))
                     .and_then(|text| {
@@ -73,7 +73,7 @@ pub fn route(
                 tokio::spawn(async move {
                     let actions = parse_webhook_events(client, json).await;
                     for action in actions {
-                        println!("Send {:?}", action);
+                        println!("Send {action:?}");
                         let _ = tx.send((host.clone(), action)).await;
                     }
                 });
@@ -86,15 +86,15 @@ async fn parse_webhook_events(line_client: LineClient, payload: Payload) -> Vec<
     let mut vec: Vec<Action> = Vec::new();
     for event in payload.events {
         let mode = event.clone().mode;
-        println!("{:?}", mode);
+        println!("{mode:?}");
         let action = match mode.as_str() {
             "active" => {
                 let event_type = event.event_type.as_str();
-                println!("{:?}", event_type);
+                println!("{event_type:?}");
                 action(&line_client, &event, event_type).await
             }
             _ => {
-                println!("Unknown event mode {:?}", mode);
+                println!("Unknown event mode {mode:?}");
                 None
             }
         };
@@ -143,7 +143,7 @@ async fn action(line_client: &LineClient, event: &Event, event_type: &str) -> Op
             }
         }
         event => {
-            println!("Unhandled event {}", event);
+            println!("Unhandled event {event}");
         }
     }
     #[allow(clippy::needless_return)]

@@ -71,7 +71,7 @@ impl<'de> Visitor<'de> for MealVisitor {
         match v {
             "昼" => Result::Ok(Meal::Lunch),
             "夜" => Result::Ok(Meal::Dinner),
-            _ => Result::Err(E::custom(format!("Unknown meal value {}", v))),
+            _ => Result::Err(E::custom(format!("Unknown meal value {v}"))),
         }
     }
 }
@@ -107,7 +107,7 @@ pub trait FirebaseApi {
     async fn delete_place(&self, jar: &Jar, place: &Place) -> HttpResult<Place>;
 
     fn firebase_url(&self, jar: &Jar, path: &str) -> String {
-        format!("{}/{}/{}.json", BASE_URL, jar, path)
+        format!("{BASE_URL}/{jar}/{path}.json")
     }
 }
 
@@ -320,7 +320,7 @@ impl FirebaseApi for FirebaseApiV2 {
     }
 
     fn firebase_url(&self, jar: &Jar, path: &str) -> String {
-        format!("{}/v2/{}/{}.json", BASE_URL, jar, path)
+        format!("{BASE_URL}/v2/{jar}/{path}.json")
     }
 }
 
@@ -336,7 +336,7 @@ impl FirebaseApiV2 {
             .make_json_request(|client| {
                 client.get(self.firebase_url(
                     jar,
-                    format!("{}/{}", FIREBASE_API_V2_PLACE_NAME_TABLE, draw_key).as_str(),
+                    format!("{FIREBASE_API_V2_PLACE_NAME_TABLE}/{draw_key}").as_str(),
                 ))
             })
             .await?;

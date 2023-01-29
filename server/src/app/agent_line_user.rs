@@ -27,10 +27,8 @@ impl Client {
                 LineChannel::Group { id, .. } => ("group", id),
             },
         };
-        let path_and_query = format!(
-            "/line/draw?source=line&source_type={}&source_id={}",
-            source_type, source_id
-        );
+        let path_and_query =
+            format!("/line/draw?source=line&source_type={source_type}&source_id={source_id}");
         let uri = warp::http::uri::Uri::builder()
             .scheme("https")
             .authority(host)
@@ -132,7 +130,7 @@ impl LineClient {
 
         match to {
             None => {
-                println!("Could not send to a single user for {:?}", line);
+                println!("Could not send to a single user for {line:?}");
                 Ok(Empty {})
             }
             Some(user_id) => self.send_to(user_id, message).await,
@@ -177,7 +175,7 @@ impl Agent for LineClient {
         // Add count
         self.refresh(client, firebase_client, host, |draw| match draw {
             None => "無予定".to_string(),
-            Some(draw) => format!("予定中:{}", draw),
+            Some(draw) => format!("予定中:{draw}"),
         })
         .await;
     }
