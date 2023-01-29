@@ -1,5 +1,6 @@
 use crate::app::agent::Agent;
 use crate::app::core::Client::Line;
+use crate::bing::http::BingClient;
 use crate::gcp::api::{FirebaseApi, Jar};
 use crate::line::http::{LineChannel, LineClient};
 
@@ -27,7 +28,7 @@ pub enum Meal {
     Dinner,
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct Coordinates {
     pub latitude: f32,
     pub longitude: f32,
@@ -99,9 +100,25 @@ pub async fn handle_action<T: FirebaseApi + Sync>(
             line_client.whoami(&source).await;
         }
         Action::Add(source, place_name, meals) => {
-            line_client
+            let place = line_client
                 .add_place(&source, firebase_client, &place_name, meals, &host)
                 .await;
+            match place {
+                Ok(place) => {
+                    line_client
+                        .add_place_coordinates(
+                            &source,
+                            firebase_client,
+                            &place,
+                            &host,
+                            BingClient::default(),
+                        )
+                        .await;
+                }
+                Err(e) => {
+                    println!("{:?}", e);
+                }
+            }
         }
         Action::Location(source, latitude, longitude) => {
             line_client

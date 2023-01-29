@@ -13,6 +13,10 @@ fn main() {
     // Read the JSON contents of the file as an instance of `User`.
     let env_json: serde_json::Value = serde_json::from_reader(reader).unwrap();
     for (key, value) in env_json.as_object().unwrap() {
-        println!("cargo:rustc-env={}={}", key, value.as_str().unwrap());
+        println!(
+            "cargo:rustc-env={}={}",
+            key,
+            serde_json::to_string(value).unwrap()
+        );
     }
 }

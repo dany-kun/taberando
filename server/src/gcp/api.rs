@@ -1,10 +1,11 @@
+use std::collections::HashMap;
 use std::fmt::Formatter;
 
 use async_trait::async_trait;
 use rand::seq::IteratorRandom;
 use serde::de::{Error, Visitor};
 
-use crate::app::core::{Meal, Place};
+use crate::app::core::{Coordinates, Meal, Place};
 use crate::gcp::constants::BASE_URL;
 use crate::http::{HttpClient, HttpResult};
 
@@ -12,6 +13,7 @@ const FIREBASE_API_V2_CURRENT_DRAW_KEY: &str = "current_draw";
 const FIREBASE_API_V2_PLACES_KEY: &str = "places";
 const FIREBASE_API_V2_SLOTS_KEY: &str = "timeslots";
 const FIREBASE_API_V2_PLACE_NAME_TABLE: &str = "place_id_name";
+const FIREBASE_API_V2_PLACE_COORDINATES_TABLE: &str = "place_id_coordinates";
 const LABEL_PATH: &str = "label";
 
 pub(crate) type Jar = String;
@@ -93,6 +95,13 @@ pub trait FirebaseApi {
 
     async fn add_place(&self, jar: &Jar, place_name: &str, meal: &[Meal]) -> HttpResult<Place>;
 
+    async fn set_place_coordinates(
+        &self,
+        jar: &Jar,
+        place: &Place,
+        coordinates: &Coordinates,
+    ) -> HttpResult<()>;
+
     async fn remove_drawn_place(&self, jar: &Jar, place: Option<&Place>) -> HttpResult<()>;
 
     async fn delete_place(&self, jar: &Jar, place: &Place) -> HttpResult<Place>;
@@ -172,6 +181,28 @@ impl FirebaseApi for FirebaseApiV2 {
         Ok(None)
     }
 
+    async fn set_place_coordinates(
+        &self,
+        jar: &Jar,
+        place: &Place,
+        coordinates: &Coordinates,
+    ) -> HttpResult<()> {
+        self.client
+            .make_json_request(|client| {
+                client
+                    .put(
+                        self.firebase_url(
+                            jar,
+                            format!("{}/{}", FIREBASE_API_V2_PLACE_COORDINATES_TABLE, place.key)
+                                .as_str(),
+                        ),
+                    )
+                    .json(coordinates)
+            })
+            .await?;
+        Ok(())
+    }
+
     async fn add_place(&self, jar: &Jar, place_name: &str, meals: &[Meal]) -> HttpResult<Place> {
         let response: AppendedKey = self
             .client
@@ -224,7 +255,7 @@ impl FirebaseApi for FirebaseApiV2 {
             })
             .await?;
 
-        HttpResult::Ok(Place {
+        Ok(Place {
             name: place_name.to_string(),
             key: added_place_key,
         })
@@ -310,6 +341,16 @@ impl FirebaseApiV2 {
             })
             .await?;
         Ok(place)
+    }
+
+    pub async fn get_all_places_name(&self, jar: &Jar) -> HttpResult<Vec<String>> {
+        let places: HashMap<String, String> = self
+            .client
+            .make_json_request(|client| {
+                client.get(self.firebase_url(jar, FIREBASE_API_V2_PLACE_NAME_TABLE))
+            })
+            .await?;
+        Ok(places.values().cloned().collect())
     }
 
     pub async fn update_current_draw(&self, jar: &Jar, drawn_place_key: &str) -> HttpResult<()> {
