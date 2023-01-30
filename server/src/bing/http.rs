@@ -28,6 +28,11 @@ pub fn get_bing_context() -> Vec<(String, String)> {
 #[derive(Debug)]
 pub struct BingError(String);
 
+pub struct BingErrorNoResourceSets {
+    url: String,
+    message: String,
+}
+
 impl Display for BingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Bing Error")
@@ -39,6 +44,13 @@ impl Error for BingError {}
 impl From<reqwest::Error> for BingError {
     fn from(value: reqwest::Error) -> Self {
         BingError(format!("{value:?}"))
+    }
+}
+
+impl From<BingErrorNoResourceSets> for BingError {
+    fn from(value: BingErrorNoResourceSets) -> Self {
+        println!("No resource for url {}", value.url);
+        BingError(value.message)
     }
 }
 
@@ -119,16 +131,26 @@ impl BingClient {
         &self,
         query: &str,
         location_refinements: &[(String, String)],
-    ) -> Result<Vec<BingResource>, reqwest::Error> {
+    ) -> Result<Vec<BingResource>, BingError> {
         let mut url = Url::parse("https://dev.virtualearth.net/REST/v1/AutoSuggest/?c=ja").unwrap();
-        url.query_pairs_mut().append_pair("key", BING_API_KEY);
         url.query_pairs_mut().append_pair("query", query);
         location_refinements.iter().for_each(|(k, v)| {
             url.query_pairs_mut().append_pair(k, v);
         });
+        let url_base = url.clone();
+        url.query_pairs_mut().append_pair("key", BING_API_KEY);
         let resource_sets: BingResourceSets = self.0.get(url).send().await?.json().await?;
-        let vec = &resource_sets.resource_sets.first().unwrap().resources;
-        Ok(vec.clone())
+        resource_sets
+            .resource_sets
+            .first()
+            .map(|sets| sets.resources.clone())
+            .ok_or(
+                BingErrorNoResourceSets {
+                    url: url_base.to_string(),
+                    message: "No resources sets".to_string(),
+                }
+                .into(),
+            )
     }
 
     pub async fn find_geo_coordinates(&self, address: &str) -> Result<Coordinates, BingError> {
