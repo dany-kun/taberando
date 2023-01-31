@@ -11,18 +11,21 @@ const BING_API_KEY: &str = env!("BING_MAP_API_KEY");
 const BING_CONTEXT: Option<&str> = option_env!("BING_MAP_API_CONTEXT");
 
 pub fn get_bing_context() -> Vec<(String, String)> {
-    BING_CONTEXT.map_or_else(Vec::new, |ctx| {
-        serde_json::from_str::<Value>(ctx).map_or(vec![], |bing_json| match bing_json {
-            Value::Object(o) => {
-                let mut collect: Vec<(String, String)> = vec![];
-                for (k, v) in o {
-                    collect.push((k, v.as_str().unwrap().to_string()))
+    BING_CONTEXT
+        .map(|ctx| ctx.to_string())
+        .or(std::env::var("BING_MAP_API_CONTEXT").ok())
+        .map_or_else(Vec::new, |ctx| {
+            serde_json::from_str::<Value>(&ctx).map_or(vec![], |bing_json| match bing_json {
+                Value::Object(o) => {
+                    let mut collect: Vec<(String, String)> = vec![];
+                    for (k, v) in o {
+                        collect.push((k, v.as_str().unwrap().to_string()))
+                    }
+                    collect
                 }
-                collect
-            }
-            _ => vec![],
+                _ => vec![],
+            })
         })
-    })
 }
 
 #[derive(Debug)]
