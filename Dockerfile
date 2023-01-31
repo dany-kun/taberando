@@ -31,7 +31,6 @@ WORKDIR /taberando
 RUN FIREBASE_JAR_OVERRIDES=${FIREBASE_JAR_OVERRIDES} \
     FIREBASE_URL=${FIREBASE_URL} \
     BING_MAP_API_KEY=${BING_MAP_API_KEY} \
-    BING_MAP_API_CONTEXT=${BING_MAP_API_CONTEXT} \
     cargo build --release
 
 ####################################################################################################
