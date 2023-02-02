@@ -7,6 +7,7 @@ FROM rust:1.66.0 AS builder
 
 ARG FIREBASE_URL
 ARG FIREBASE_JAR_OVERRIDES
+ARG BING_MAP_API_KEY
 
 RUN update-ca-certificates
 
