@@ -142,7 +142,8 @@ impl BingClient {
         });
         let url_base = url.clone();
         url.query_pairs_mut().append_pair("key", BING_API_KEY);
-        let resource_sets: BingResourceSets = self.0.get(url).send().await?.json().await?;
+        let response = self.0.get(url).send().await?.error_for_status()?;
+        let resource_sets: BingResourceSets = response.json().await?;
         resource_sets
             .resource_sets
             .first()

@@ -348,8 +348,9 @@ impl Agent for LineClient {
                 })
                 .await;
             }
-            Err(_) => {
+            Err(e) => {
                 let message = format!("{}の位置は見つかりませんでした。", place.name).to_string();
+                println!("{e:?}");
                 let _ = self
                     .send_to_single_user(client, MessageContent::text(&message))
                     .await;
