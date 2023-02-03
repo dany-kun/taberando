@@ -1,4 +1,4 @@
-use crate::app::core::Coordinates;
+use crate::app::coordinates::Coordinates;
 use futures::TryFutureExt;
 use reqwest::Url;
 use serde::Deserialize;

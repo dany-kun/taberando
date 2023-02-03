@@ -1,4 +1,5 @@
 use crate::app::agent::Agent;
+use crate::app::coordinates::Coordinates;
 use crate::app::core::Client::Line;
 use crate::bing::http::BingClient;
 use crate::gcp::api::{FirebaseApi, Jar};
@@ -26,12 +27,6 @@ pub enum Action {
 pub enum Meal {
     Lunch,
     Dinner,
-}
-
-#[derive(serde::Serialize, Debug, Clone)]
-pub struct Coordinates {
-    pub latitude: f32,
-    pub longitude: f32,
 }
 
 #[derive(Debug, Clone)]

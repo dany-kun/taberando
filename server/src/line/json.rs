@@ -1,7 +1,8 @@
 use std::fmt::Debug;
 
 use crate::app;
-use crate::app::core::{Coordinates, Meal};
+use crate::app::coordinates::Coordinates;
+use crate::app::core::Meal;
 use crate::app::user_action::UserAction;
 use serde::{Deserialize, Serialize};
 

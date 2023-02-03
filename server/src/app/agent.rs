@@ -1,6 +1,7 @@
+use crate::app::coordinates::Coordinates;
 use async_trait::async_trait;
 
-use crate::app::core::{Client, Coordinates, Meal, Place};
+use crate::app::core::{Client, Meal, Place};
 use crate::bing::http::BingClient;
 use crate::gcp::api::FirebaseApi;
 use crate::http::HttpResult;
