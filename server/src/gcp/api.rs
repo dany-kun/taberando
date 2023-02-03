@@ -99,7 +99,7 @@ pub trait FirebaseApi {
     async fn draw(
         &self,
         jar: &Jar,
-        meal: Meal,
+        meal: &Meal,
         coordinates: &Option<Coordinates>,
     ) -> HttpResult<Option<Place>>;
 
@@ -160,7 +160,7 @@ impl FirebaseApi for FirebaseApiV2 {
     async fn draw(
         &self,
         jar: &Jar,
-        meal: Meal,
+        meal: &Meal,
         coordinates: &Option<Coordinates>,
     ) -> HttpResult<Option<Place>> {
         let places = self.get_list_of_places_keys(jar, meal).await?;
@@ -203,7 +203,7 @@ impl FirebaseApi for FirebaseApiV2 {
             .await?;
 
         // Store the timeslot to tables
-        let _: Vec<serde_json::Value> = futures::future::try_join_all(meals.iter().map(|meal| {
+        let _: Vec<Value> = futures::future::try_join_all(meals.iter().map(|meal| {
             self.client.make_json_request(|client| {
                 client
                     .put(
@@ -360,7 +360,7 @@ impl FirebaseApiV2 {
     async fn get_list_of_places_keys(
         &self,
         jar: &Jar,
-        meal: Meal,
+        meal: &Meal,
     ) -> HttpResult<Option<HashMap<String, serde_json::Value>>> {
         // Very un-efficient since we are retrieving the whole set of places for a meal...
         let place_response: Option<HashMap<String, serde_json::Value>> = self
