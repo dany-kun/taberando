@@ -69,7 +69,8 @@ pub struct QuickReplyAction {
 pub enum QuickReplyState {
     Idle(Option<Coordinates>),
     ActiveDraw(Option<Coordinates>),
-    NoShops,
+    NoShops(Meal),
+    NoShopsClosedBy(Meal, Coordinates),
 }
 
 const LOCATION_ICON_URL: &str = "https://cdn.iconscout.com/icon/free/png-256/pin-191-119557.png";
@@ -105,13 +106,13 @@ impl MessageContent {
         }
     }
 
-    pub(crate) fn location_quick_reply(label: &str) -> QuickReply {
+    pub(crate) fn location_quick_reply() -> QuickReply {
         QuickReply {
             quick_reply_type: "action".to_string(),
             image_url: Some(LOCATION_ICON_URL.to_string()),
             action: QuickReplyAction {
                 quick_reply_action_type: "location".to_string(),
-                label: label.to_string(),
+                label: "決".to_string(),
                 data: None,
                 uri: None,
             },
@@ -153,7 +154,7 @@ impl MessageContent {
                         &UserAction::Draw(Meal::Dinner, coordinates.clone()),
                         None,
                     ),
-                    MessageContent::location_quick_reply("決"),
+                    MessageContent::location_quick_reply(),
                 ];
                 if coordinates.is_some() {
                     base.push(MessageContent::clear_location_quick_reply());
@@ -173,7 +174,12 @@ impl MessageContent {
                 ),
                 MessageContent::postback_quick_reply(&UserAction::DeleteCurrent(coordinates), None),
             ],
-            QuickReplyState::NoShops => vec![client.add_place_quick_reply(host)],
+            QuickReplyState::NoShops(_) => vec![client.add_place_quick_reply(host)],
+            QuickReplyState::NoShopsClosedBy(_, _) => vec![
+                client.add_place_quick_reply(host),
+                MessageContent::location_quick_reply(),
+                MessageContent::clear_location_quick_reply(),
+            ],
         };
         self.quick_replies = Some(QuickReplyItems { items: replies });
         self.clone()

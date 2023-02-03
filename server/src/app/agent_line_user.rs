@@ -193,7 +193,7 @@ impl Agent for LineClient {
         match draw {
             Ok(draw) => match draw {
                 None => {
-                    let draw = firebase_client.draw(&jar, meal, coordinates).await;
+                    let draw = firebase_client.draw(&jar, &meal, coordinates).await;
                     let message = draw
                         .map(|res| {
                             res.map(|draw| {
@@ -204,12 +204,24 @@ impl Agent for LineClient {
                                         QuickReplyState::ActiveDraw(coordinates.clone()),
                                     )
                             })
-                            .unwrap_or_else(|| {
-                                MessageContent::text("何も出ませんでした").with_quick_replies(
-                                    client,
-                                    host,
-                                    QuickReplyState::NoShops,
-                                )
+                            .unwrap_or_else(|| match coordinates {
+                                None => MessageContent::text("何も出ませんでした")
+                                    .with_quick_replies(
+                                        client,
+                                        host,
+                                        QuickReplyState::NoShops(meal.clone()),
+                                    ),
+                                Some(coordinates) => {
+                                    MessageContent::text("指定位置の近くに店ありません")
+                                        .with_quick_replies(
+                                            client,
+                                            host,
+                                            QuickReplyState::NoShopsClosedBy(
+                                                meal.clone(),
+                                                coordinates.clone(),
+                                            ),
+                                        )
+                                }
                             })
                         })
                         .unwrap_or_else(|e| MessageContent::error_message(&e));
