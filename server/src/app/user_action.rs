@@ -1,9 +1,10 @@
 use std::fmt::Formatter;
 
+use crate::app::coordinates::Coordinates;
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::app::core::{Coordinates, Meal};
+use crate::app::core::Meal;
 
 const DRAW_LUNCH_ACTION: &str = "lunch_action";
 const DRAW_DINNER_ACTION: &str = "dinner_action";

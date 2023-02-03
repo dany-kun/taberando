@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 
 use crate::app::agent::Agent;
-use crate::app::core::{Client, Coordinates, Meal, Place};
+use crate::app::coordinates::Coordinates;
+use crate::app::core::{Client, Meal, Place};
 use crate::bing;
 use crate::bing::http::BingClient;
 use crate::gcp::api::{FirebaseApi, Jar};
@@ -192,7 +193,7 @@ impl Agent for LineClient {
         match draw {
             Ok(draw) => match draw {
                 None => {
-                    let draw = firebase_client.draw(&jar, meal).await;
+                    let draw = firebase_client.draw(&jar, meal, coordinates).await;
                     let message = draw
                         .map(|res| {
                             res.map(|draw| {
