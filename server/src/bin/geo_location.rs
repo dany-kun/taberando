@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use server::bing::http::{get_bing_context, BingClient, BingError};
-use server::gcp::api::FirebaseApiV2;
+use server::gcp::api::{FirebaseApi, FirebaseApiV2};
 use server::gcp::client::get_firebase_client;
 
 #[tokio::main]
@@ -14,9 +14,11 @@ async fn main() {
     if group.is_none() {
         return;
     }
+
     let db_group = group.unwrap();
+    println!("{db_group:?}");
     let places = firebase_api
-        .get_all_places_name(&db_group.to_string())
+        .get_all_places(&db_group.to_string())
         .await
         .unwrap();
     let client = BingClient::default();
@@ -24,10 +26,17 @@ async fn main() {
     let mut results: HashMap<&String, BingError> = HashMap::new();
     for place in places.iter() {
         let result = client
-            .find_geo_coordinates_from_query(place, &get_bing_context())
+            .find_geo_coordinates_from_query(&place.name, &get_bing_context())
             .await;
-        if let Err(e) = result {
-            results.insert(place, e);
+        match result {
+            Ok(coordinates) => {
+                let _ = firebase_api
+                    .set_place_coordinates(&db_group.to_string(), place, &coordinates)
+                    .await;
+            }
+            Err(e) => {
+                results.insert(&place.name, e);
+            }
         }
     }
     println!("{:?}", places.len());
