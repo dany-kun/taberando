@@ -64,10 +64,10 @@ impl HttpClient for Client {
             Ok(_res) => Ok(response),
             Err(e) => {
                 let message = response.text().await.map_err(|e| ApiError::Unknown {
-                    message: format!("Could not decode response, got {:?}", e),
+                    message: format!("Could not decode response, got {e:?}"),
                 })?;
                 let status = e.status().ok_or(ApiError::Unknown {
-                    message: format!("Could not decode status, got {:?}", e),
+                    message: format!("Could not decode status, got {e:?}"),
                 })?;
                 Err(ApiError::Http {
                     code: status.as_u16(),

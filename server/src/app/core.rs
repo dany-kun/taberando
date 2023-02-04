@@ -1,5 +1,7 @@
 use crate::app::agent::Agent;
+use crate::app::coordinates::Coordinates;
 use crate::app::core::Client::Line;
+use crate::bing::http::BingClient;
 use crate::gcp::api::{FirebaseApi, Jar};
 use crate::line::http::{LineChannel, LineClient};
 
@@ -11,12 +13,14 @@ pub enum Client {
 #[derive(Debug)]
 pub enum Action {
     Add(Client, String, Vec<Meal>),
-    Draw(Client, Meal),
-    PostponeCurrent(Client),
-    ArchiveCurrent(Client),
-    RemoveCurrent(Client),
+    Draw(Client, Meal, Option<Coordinates>),
+    PostponeCurrent(Client, Option<Coordinates>),
+    ArchiveCurrent(Client, Option<Coordinates>),
+    RemoveCurrent(Client, Option<Coordinates>),
     Refresh(Client),
     WhoAmI(Client),
+    Location(Client, f32, f32),
+    ClearLocation(Client),
 }
 
 #[derive(Debug, Clone)]
@@ -35,9 +39,9 @@ impl From<&Client> for Jar {
     fn from(client: &Client) -> Self {
         match client {
             Line(channel) => match channel {
-                LineChannel::User(id) => format!("user_{}", id),
-                LineChannel::Room { id, .. } => format!("room_{}", id),
-                LineChannel::Group { id, .. } => format!("group_{}", id),
+                LineChannel::User(id) => format!("user_{id}"),
+                LineChannel::Room { id, .. } => format!("room_{id}"),
+                LineChannel::Group { id, .. } => format!("group_{id}"),
             },
         }
     }
@@ -64,22 +68,24 @@ pub async fn handle_action<T: FirebaseApi + Sync>(
 ) {
     let (host, action) = action;
     match action {
-        Action::Draw(source, meal) => {
+        Action::Draw(source, meal, coordinates) => {
             line_client
-                .try_draw(meal, &source, firebase_client, &host)
+                .try_draw(meal, &source, firebase_client, &host, &coordinates)
                 .await;
         }
-        Action::PostponeCurrent(source) => {
-            line_client.postpone(&source, firebase_client, &host).await;
-        }
-        Action::RemoveCurrent(source) => {
+        Action::PostponeCurrent(source, coordinates) => {
             line_client
-                .delete_current(&source, firebase_client, &host)
+                .postpone(&source, firebase_client, &host, coordinates)
                 .await;
         }
-        Action::ArchiveCurrent(source) => {
+        Action::RemoveCurrent(source, coordinates) => {
             line_client
-                .archive_current(&source, firebase_client, &host)
+                .delete_current(&source, firebase_client, &host, coordinates)
+                .await;
+        }
+        Action::ArchiveCurrent(source, coordinates) => {
+            line_client
+                .archive_current(&source, firebase_client, &host, coordinates)
                 .await;
         }
         Action::Refresh(source) => {
@@ -89,9 +95,33 @@ pub async fn handle_action<T: FirebaseApi + Sync>(
             line_client.whoami(&source).await;
         }
         Action::Add(source, place_name, meals) => {
-            line_client
+            let place = line_client
                 .add_place(&source, firebase_client, &place_name, meals, &host)
                 .await;
+            match place {
+                Ok(place) => {
+                    line_client
+                        .add_place_coordinates(
+                            &source,
+                            firebase_client,
+                            &place,
+                            &host,
+                            BingClient::default(),
+                        )
+                        .await;
+                }
+                Err(e) => {
+                    println!("{e:?}");
+                }
+            }
+        }
+        Action::Location(source, latitude, longitude) => {
+            line_client
+                .update_location(&source, &host, latitude, longitude)
+                .await;
+        }
+        Action::ClearLocation(source) => {
+            line_client.clear_location(&source, &host).await;
         }
     }
 }

@@ -18,8 +18,6 @@ pub enum LineChannel {
 #[derive(Clone)]
 pub struct LineClient(pub(crate) reqwest::Client);
 
-impl LineClient {}
-
 impl LineClient {
     pub async fn send_to(&self, id: &str, message: MessageContent) -> HttpResult<Empty> {
         self.send_messages(&Message {
@@ -49,7 +47,7 @@ impl HttpClient for LineClient {
 pub fn get_line_client(line_token: String) -> LineClient {
     let mut header_map = HeaderMap::new();
 
-    let authorization_header = &*format!("Bearer {}", line_token);
+    let authorization_header = &*format!("Bearer {line_token}");
     let mut auth_value = HeaderValue::from_str(authorization_header).unwrap();
     auth_value.set_sensitive(true);
     header_map.append(AUTHORIZATION, auth_value);

@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 pub async fn migrate_v2(http_client: Client) -> HttpResult<()> {
     let v1 = http_client
-        .make_json_request(|client| client.get(format!("{}/.json", BASE_URL)))
+        .make_json_request(|client| client.get(format!("{BASE_URL}/.json")))
         .await?;
     if let serde_json::Value::Object(map) = v1 {
         let _api = FirebaseApiV2::new(http_client);
@@ -23,7 +23,7 @@ pub async fn migrate_v2(http_client: Client) -> HttpResult<()> {
 
 #[allow(dead_code)]
 async fn migrating_entry(jar_name: &String, values: &serde_json::Value, api: &FirebaseApiV2) {
-    println!("Migrating {:?}", jar_name);
+    println!("Migrating {jar_name:?}");
     if let serde_json::Value::Object(jar_entries) = values {
         let mut shops = HashMap::new();
         for (db_key, value) in jar_entries.iter() {
@@ -51,14 +51,14 @@ async fn migrating_entry(jar_name: &String, values: &serde_json::Value, api: &Fi
                         shops.insert(shop_name, times);
                     });
                 }
-                unknown => println!("Unknown entry {:?} for jar {:?}", unknown, jar_name),
+                unknown => println!("Unknown entry {unknown:?} for jar {jar_name:?}"),
             }
         }
-        println!("Adding shops {:?}", shops);
+        println!("Adding shops {shops:?}");
         for (name, meals) in shops.iter() {
             let _ = api.add_place(jar_name, name, meals).await;
         }
     } else {
-        println!("Unknown entry {:?}", values)
+        println!("Unknown entry {values:?}")
     }
 }

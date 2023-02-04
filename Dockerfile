@@ -5,9 +5,6 @@
 ####################################################################################################
 FROM rust:1.66.0 AS builder
 
-ARG FIREBASE_URL
-ARG FIREBASE_JAR_OVERRIDES
-
 RUN update-ca-certificates
 
 # Create appuser
@@ -25,10 +22,11 @@ RUN adduser \
 
 
 COPY ./server ./taberando
+COPY .env.prod.json ./taberando/.env.json
 
 WORKDIR /taberando
 
-RUN FIREBASE_JAR_OVERRIDES=${FIREBASE_JAR_OVERRIDES} FIREBASE_URL=${FIREBASE_URL} cargo build --release
+RUN cargo build --release
 
 ####################################################################################################
 ## Final image

@@ -48,7 +48,7 @@ pub fn route(
                         let _ = sender.send((host, action)).await;
                     });
                 } else {
-                    println!("Could not handle {:?} {:?}", source, body);
+                    println!("Could not handle {source:?} {body:?}");
                 }
             },
         )

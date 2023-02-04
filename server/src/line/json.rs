@@ -1,16 +1,12 @@
 use std::fmt::Debug;
 
+use crate::app;
+use crate::app::coordinates::Coordinates;
+use crate::app::core::Meal;
+use crate::app::user_action::UserAction;
 use serde::{Deserialize, Serialize};
 
 use crate::line::bot::{EventSource, Postback};
-
-pub const DRAW_LUNCH_ACTION: &str = "lunch_action";
-pub const DRAW_DINNER_ACTION: &str = "dinner_action";
-pub const POSTPONE_ACTION: &str = "postpone_action";
-pub const DELETE_ACTION: &str = "delete_action";
-pub const ARCHIVE_ACTION: &str = "archive_action";
-pub const ADD_ACTION: &str = "add_action";
-pub const REFRESH_ACTION: &str = "refresh_action";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Message {
@@ -39,6 +35,8 @@ pub struct MessageContent {
     #[serde(rename(deserialize = "type", serialize = "type"))]
     pub(crate) message_type: String,
     pub(crate) text: Option<String>,
+    pub(crate) latitude: Option<f32>,
+    pub(crate) longitude: Option<f32>,
     #[serde(rename(serialize = "quickReply"))]
     #[serde(skip_deserializing)]
     quick_replies: Option<QuickReplyItems>,
@@ -53,6 +51,8 @@ struct QuickReplyItems {
 pub struct QuickReply {
     #[serde(rename(serialize = "type"))]
     pub(crate) quick_reply_type: String,
+    #[serde(rename(serialize = "imageUrl"))]
+    pub(crate) image_url: Option<String>,
     pub(crate) action: QuickReplyAction,
 }
 
@@ -65,22 +65,38 @@ pub struct QuickReplyAction {
     pub(crate) uri: Option<String>,
 }
 
+#[derive(Debug, Clone)]
+pub enum QuickReplyState {
+    Idle(Option<Coordinates>),
+    ActiveDraw(Option<Coordinates>),
+    NoShops(Meal),
+    NoShopsClosedBy(Meal, Coordinates),
+}
+
+const LOCATION_ICON_URL: &str = "https://cdn.iconscout.com/icon/free/png-256/pin-191-119557.png";
+
 impl MessageContent {
-    pub(crate) fn postback_quick_reply(label: &str, data: &str) -> QuickReply {
+    pub(crate) fn postback_quick_reply(
+        user_action: &UserAction,
+        icon: Option<String>,
+    ) -> QuickReply {
+        let serialized_action = serde_json::to_string(user_action).unwrap();
         QuickReply {
             quick_reply_type: "action".to_string(),
+            image_url: icon,
             action: QuickReplyAction {
                 quick_reply_action_type: "postback".to_string(),
-                label: label.to_string(),
-                data: Some(data.to_string()),
+                label: user_action.label(),
+                data: Some(serialized_action),
                 uri: None,
             },
         }
     }
 
-    pub(crate) fn uri_quick_reply(label: &str, uri: &str) -> QuickReply {
+    pub(crate) fn uri_quick_reply(label: &str, uri: &str, icon: Option<String>) -> QuickReply {
         QuickReply {
             quick_reply_type: "action".to_string(),
+            image_url: icon,
             action: QuickReplyAction {
                 quick_reply_action_type: "uri".to_string(),
                 label: label.to_string(),
@@ -90,9 +106,24 @@ impl MessageContent {
         }
     }
 
-    pub fn with_quick_replies(&mut self, replies: Vec<QuickReply>) -> MessageContent {
-        self.quick_replies = Some(QuickReplyItems { items: replies });
-        self.clone()
+    pub(crate) fn location_quick_reply() -> QuickReply {
+        QuickReply {
+            quick_reply_type: "action".to_string(),
+            image_url: Some(LOCATION_ICON_URL.to_string()),
+            action: QuickReplyAction {
+                quick_reply_action_type: "location".to_string(),
+                label: "決".to_string(),
+                data: None,
+                uri: None,
+            },
+        }
+    }
+
+    pub(crate) fn clear_location_quick_reply() -> QuickReply {
+        MessageContent::postback_quick_reply(
+            &UserAction::ClearLocation,
+            Some(LOCATION_ICON_URL.to_string()),
+        )
     }
 
     pub(crate) fn text(message: &str) -> MessageContent {
@@ -100,14 +131,67 @@ impl MessageContent {
             message_type: "text".to_string(),
             text: Some(message.to_string()),
             quick_replies: None,
+            latitude: None,
+            longitude: None,
         }
+    }
+
+    pub fn with_quick_replies(
+        &mut self,
+        client: &app::core::Client,
+        host: &str,
+        quick_reply_state: QuickReplyState,
+    ) -> MessageContent {
+        let replies = match quick_reply_state {
+            QuickReplyState::Idle(coordinates) => {
+                let mut base = vec![
+                    client.add_place_quick_reply(host),
+                    MessageContent::postback_quick_reply(
+                        &UserAction::Draw(Meal::Lunch, coordinates.clone()),
+                        None,
+                    ),
+                    MessageContent::postback_quick_reply(
+                        &UserAction::Draw(Meal::Dinner, coordinates.clone()),
+                        None,
+                    ),
+                    MessageContent::location_quick_reply(),
+                ];
+                if coordinates.is_some() {
+                    base.push(MessageContent::clear_location_quick_reply());
+                }
+                base
+            }
+            QuickReplyState::ActiveDraw(coordinates) => vec![
+                client.add_place_quick_reply(host),
+                // MessageContent::location_quick_reply("location", None),
+                MessageContent::postback_quick_reply(
+                    &UserAction::ArchiveCurrent(coordinates.clone()),
+                    None,
+                ),
+                MessageContent::postback_quick_reply(
+                    &UserAction::Postpone(coordinates.clone()),
+                    None,
+                ),
+                MessageContent::postback_quick_reply(&UserAction::DeleteCurrent(coordinates), None),
+            ],
+            QuickReplyState::NoShops(_) => vec![client.add_place_quick_reply(host)],
+            QuickReplyState::NoShopsClosedBy(_, _) => vec![
+                client.add_place_quick_reply(host),
+                MessageContent::location_quick_reply(),
+                MessageContent::clear_location_quick_reply(),
+            ],
+        };
+        self.quick_replies = Some(QuickReplyItems { items: replies });
+        self.clone()
     }
 
     pub(crate) fn error_message<E: Debug>(error: &E) -> MessageContent {
         MessageContent {
             message_type: "text".to_string(),
-            text: Some(format!("Error {:?}", error)),
+            text: Some(format!("Error {error:?}")),
             quick_replies: None,
+            latitude: None,
+            longitude: None,
         }
     }
 }

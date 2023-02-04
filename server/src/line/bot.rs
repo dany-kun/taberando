@@ -43,7 +43,7 @@ impl EventSource {
     }
 }
 
-pub async fn setup(_client: &LineClient, _source: EventSource) -> HttpResult<()> {
+pub async fn setup(_client: &LineClient, _source: &EventSource) -> HttpResult<()> {
     // let menu_id = client.create_rich_menu(&RichMenu::default()).await?;
     // println!("{}", menu_id);
     // client.set_rich_menu(menu_id.as_str()).await?;
