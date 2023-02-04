@@ -2,3 +2,4 @@ src/public.url
 .idea
 target
 .env.json
+.env.prod.json

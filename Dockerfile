@@ -5,10 +5,6 @@
 ####################################################################################################
 FROM rust:1.66.0 AS builder
 
-ARG FIREBASE_URL
-ARG FIREBASE_JAR_OVERRIDES
-ARG BING_MAP_API_KEY
-
 RUN update-ca-certificates
 
 # Create appuser
@@ -26,13 +22,11 @@ RUN adduser \
 
 
 COPY ./server ./taberando
+COPY .env.prod.json ./taberando/.env.json
 
 WORKDIR /taberando
 
-RUN FIREBASE_JAR_OVERRIDES=${FIREBASE_JAR_OVERRIDES} \
-    FIREBASE_URL=${FIREBASE_URL} \
-    BING_MAP_API_KEY=${BING_MAP_API_KEY} \
-    cargo build --release
+RUN cargo build --release
 
 ####################################################################################################
 ## Final image
