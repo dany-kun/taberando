@@ -16,7 +16,9 @@ fn main() {
         println!(
             "cargo:rustc-env={}={}",
             key,
-            serde_json::to_string(value).unwrap()
+            value
+                .as_str()
+                .unwrap_or(&serde_json::to_string(value).unwrap())
         );
     }
 }

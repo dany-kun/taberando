@@ -169,7 +169,7 @@ impl FirebaseApi for FirebaseApiV2 {
             Some(meal_places) => {
                 let place_keys: Vec<String> = match coordinates {
                     None => meal_places.keys().map(|k| k.to_string()).collect(),
-                    Some(origin) => self.find_closed_places(jar, meal_places, origin).await?,
+                    Some(origin) => self.find_close_places(jar, meal_places, origin).await?,
                 };
                 place_keys
                     .iter()
@@ -335,18 +335,24 @@ impl FirebaseApiV2 {
         Ok(place)
     }
 
-    pub async fn get_all_places_name(&self, jar: &Jar) -> HttpResult<Vec<String>> {
-        let places: HashMap<String, String> = self
+    pub async fn get_all_places(&self, jar: &Jar) -> HttpResult<Vec<Place>> {
+        let places: HashMap<String, ApiV2Place> = self
             .client
             .make_json_request(|client| {
-                client.get(self.firebase_url(jar, FIREBASE_API_V2_PLACE_NAME_TABLE))
+                client.get(self.firebase_url(jar, FIREBASE_API_V2_PLACES_KEY))
             })
             .await?;
-        Ok(places.values().cloned().collect())
+        Ok(places
+            .iter()
+            .map(|(key, place)| Place {
+                key: key.clone(),
+                name: place.name.clone(),
+            })
+            .collect())
     }
 
     pub async fn update_current_draw(&self, jar: &Jar, drawn_place_key: &str) -> HttpResult<()> {
-        let _: serde_json::Value = self
+        let _: Value = self
             .client
             .make_json_request(|client| {
                 client
@@ -377,7 +383,7 @@ impl FirebaseApiV2 {
         Ok(place_response)
     }
 
-    async fn find_closed_places(
+    async fn find_close_places(
         &self,
         jar: &Jar,
         meal_places: HashMap<String, Value>,
