@@ -3,6 +3,8 @@ use async_trait::async_trait;
 use reqwest::{Client, Response};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
+use std::error::Error;
+use std::fmt::{Display, Formatter};
 
 pub(crate) type HttpResult<T> = std::result::Result<T, ApiError>;
 
@@ -16,6 +18,14 @@ pub enum ApiError {
     Http { code: u16, message: String },
     Unknown { message: String },
 }
+
+impl Display for ApiError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl Error for ApiError {}
 
 impl From<JarError> for ApiError {
     fn from(_value: JarError) -> Self {

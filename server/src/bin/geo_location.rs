@@ -1,15 +1,14 @@
-use server::app::jar::Jar;
 use std::collections::HashMap;
 
+use server::app::jar::Jar;
 use server::bing::http::{get_bing_context, BingClient, BingError};
-use server::gcp::api::{FirebaseApi, FirebaseApiV2};
-use server::gcp::client::get_firebase_client;
+use server::gcp::api::FirebaseApi;
+pub(crate) use server::gcp::http_api::FirebaseApiV2;
 
 #[tokio::main]
 async fn main() {
     // env_logger::init();
-    let firebase_client = get_firebase_client().await;
-    let firebase_api = FirebaseApiV2::new(firebase_client);
+    let firebase_api = FirebaseApiV2::default().await;
     let args: Vec<String> = std::env::args().collect();
     let group = args.get(1);
     if group.is_none() {

@@ -2,8 +2,6 @@ use clap::{App, AppSettings, Arg, ArgMatches};
 use serde::Deserialize;
 use serde::Serialize;
 
-use line::http;
-use server::line;
 use server::line::api::LineApi;
 use server::line::http::LineClient;
 use server::line::json::RichMenu;
@@ -122,7 +120,7 @@ fn get_http_client(m: &ArgMatches) -> LineClient {
         .value_of_t("line-token")
         .or_else(|_| std::env::var("LINE_TOKEN"))
         .expect("Please specify a line token");
-    http::get_line_client(token)
+    LineClient::new(&token)
 }
 
 #[derive(Serialize, Deserialize)]

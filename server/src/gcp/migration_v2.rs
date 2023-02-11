@@ -1,17 +1,18 @@
 use crate::app::core::Meal;
 use crate::app::jar::Jar;
-use crate::gcp::api::{FirebaseApi, FirebaseApiV2};
+
+use crate::gcp::api::FirebaseApi;
 use crate::gcp::constants::BASE_URL;
-use crate::http::{HttpClient, HttpResult};
-use reqwest::Client;
+use crate::gcp::http_api::FirebaseApiV2;
+use crate::http::HttpResult;
 use std::collections::HashMap;
 
-pub async fn migrate_v2(http_client: Client) -> HttpResult<()> {
+pub async fn migrate_v2(http_client: &FirebaseApiV2) -> HttpResult<()> {
     let v1 = http_client
         .make_json_request(|client| client.get(format!("{BASE_URL}/.json")))
         .await?;
     if let serde_json::Value::Object(map) = v1 {
-        let _api = FirebaseApiV2::new(http_client);
+        let _api = FirebaseApiV2::default();
         for (entry, _values) in map.iter() {
             if entry != "v2" {
                 // Don't run as this is not idempotent
