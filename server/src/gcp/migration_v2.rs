@@ -1,4 +1,5 @@
 use crate::app::core::Meal;
+use crate::app::jar::Jar;
 use crate::gcp::api::{FirebaseApi, FirebaseApiV2};
 use crate::gcp::constants::BASE_URL;
 use crate::http::{HttpClient, HttpResult};
@@ -22,16 +23,14 @@ pub async fn migrate_v2(http_client: Client) -> HttpResult<()> {
 }
 
 #[allow(dead_code)]
-async fn migrating_entry(jar_name: &String, values: &serde_json::Value, api: &FirebaseApiV2) {
-    println!("Migrating {jar_name:?}");
+async fn migrating_entry(jar: &Jar, values: &serde_json::Value, api: &FirebaseApiV2) {
+    println!("Migrating {jar:?}");
     if let serde_json::Value::Object(jar_entries) = values {
         let mut shops = HashMap::new();
         for (db_key, value) in jar_entries.iter() {
             match db_key.as_str() {
                 "pending_shop" => {
-                    let _ = api
-                        .update_current_draw(jar_name, value.as_str().unwrap())
-                        .await;
+                    let _ = api.update_current_draw(jar, value.as_str().unwrap()).await;
                 }
                 "昼だけ" => {
                     value.as_object().unwrap().iter().for_each(|(_, name)| {
@@ -51,12 +50,12 @@ async fn migrating_entry(jar_name: &String, values: &serde_json::Value, api: &Fi
                         shops.insert(shop_name, times);
                     });
                 }
-                unknown => println!("Unknown entry {unknown:?} for jar {jar_name:?}"),
+                unknown => println!("Unknown entry {unknown:?} for jar {jar:?}"),
             }
         }
         println!("Adding shops {shops:?}");
         for (name, meals) in shops.iter() {
-            let _ = api.add_place(jar_name, name, meals).await;
+            let _ = api.add_place(jar, name, meals).await;
         }
     } else {
         println!("Unknown entry {values:?}")
