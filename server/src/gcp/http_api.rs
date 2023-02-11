@@ -10,6 +10,7 @@ use crate::app::core::{Meal, Place};
 use crate::app::jar::Jar;
 use crate::gcp::api::ApiV2Place;
 use crate::gcp::api::FirebaseApi;
+use crate::gcp::constants::BASE_URL;
 use crate::gcp::constants::CLOSE_PLACE_RADIUS_METER;
 use crate::gcp::constants::FIREBASE_API_V2_CURRENT_DRAW_KEY;
 use crate::gcp::constants::FIREBASE_API_V2_PLACES_KEY;
@@ -28,7 +29,7 @@ impl FirebaseApiV2 {
         Self::new(Self::get_firebase_client().await)
     }
 
-    pub fn new(client: reqwest::Client) -> Self {
+    pub fn new(client: Client) -> Self {
         FirebaseApiV2 { client }
     }
 
@@ -58,7 +59,6 @@ impl FirebaseApiV2 {
     ) -> HttpResult<Option<String>> {
         // Get the current draw name from the key
         let place: Option<String> = self
-            .client
             .make_json_request(|client| {
                 client.get(self.firebase_url(
                     jar,
@@ -71,7 +71,6 @@ impl FirebaseApiV2 {
 
     pub async fn get_all_places(&self, jar: &Jar) -> HttpResult<Vec<Place>> {
         let places: HashMap<String, ApiV2Place> = self
-            .client
             .make_json_request(|client| {
                 client.get(self.firebase_url(jar, FIREBASE_API_V2_PLACES_KEY))
             })
@@ -87,7 +86,6 @@ impl FirebaseApiV2 {
 
     pub async fn update_current_draw(&self, jar: &Jar, drawn_place_key: &str) -> HttpResult<()> {
         let _: Value = self
-            .client
             .make_json_request(|client| {
                 client
                     .put(self.firebase_url(jar, FIREBASE_API_V2_CURRENT_DRAW_KEY))
@@ -104,7 +102,6 @@ impl FirebaseApiV2 {
     ) -> HttpResult<Option<HashMap<String, Value>>> {
         // Very un-efficient since we are retrieving the whole set of places for a meal...
         let place_response: Option<HashMap<String, Value>> = self
-            .client
             .make_json_request(|client| {
                 client
                     .get(self.firebase_url(
@@ -125,7 +122,6 @@ impl FirebaseApiV2 {
     ) -> HttpResult<Vec<String>> {
         // First get all places with coordinates....(not efficient...)
         let located_places = self
-            .client
             .make_json_request::<HashMap<String, Coordinates>, _>(|client| {
                 client.get(self.firebase_url(jar, FIREBASE_API_V2_PLACE_COORDINATES_TABLE))
             })
@@ -140,6 +136,16 @@ impl FirebaseApiV2 {
             .into_iter()
             .collect();
         Ok(closed_places)
+    }
+
+    pub async fn get_all_groups(&self) -> HttpResult<Vec<Jar>> {
+        self.make_json_request::<HashMap<String, Value>, _>(|client| {
+            client
+                .get(format!("{BASE_URL}/v2.json"))
+                .query(&[("shallow", "true")])
+        })
+        .await
+        .map(|raw| raw.keys().map(|k| Jar::new(k)).collect::<Vec<_>>())
     }
 
     pub(crate) async fn make_json_request<

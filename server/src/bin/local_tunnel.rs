@@ -6,7 +6,7 @@ use std::process::{Command, Stdio};
 use regex::Regex;
 
 use server::line::api::LineApi;
-use server::line::http;
+use server::line::http::LineClient;
 
 // TODO Refactor this to use concurrency primitives
 
@@ -55,7 +55,7 @@ fn handle_public_url(line_token: &str, result: &str) {
         .build()
         .unwrap()
         .block_on(async {
-            http::get_line_client(line_token.to_string())
+            LineClient::new(line_token)
                 .update_line_webhook_url(result)
                 .await
                 .unwrap();

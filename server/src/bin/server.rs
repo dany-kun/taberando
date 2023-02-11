@@ -5,6 +5,7 @@ use warp::Filter;
 use server::app::core::Action;
 use server::gcp::api::FirebaseApi;
 use server::gcp::http_api::FirebaseApiV2;
+use server::line::http::LineClient;
 use server::{app, line};
 
 #[tokio::main]
@@ -15,7 +16,7 @@ async fn main() {
         .map(|port| port.parse::<u16>().unwrap())
         .unwrap_or(4001);
     let line_token = std::env::var("LINE_TOKEN").expect("Please specify a LINE_TOKEN env variable");
-    let line_client = line::http::get_line_client(line_token);
+    let line_client = LineClient::new(&line_token);
 
     let (tx, rx) = mpsc::channel(32);
 

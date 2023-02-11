@@ -151,7 +151,8 @@ impl LineApi for LineClient {
 
         let result: HashMap<String, String> = self
             .make_json_request(|client| {
-                client.get(Self::api_url(format!("group/{raw_id}/summary").as_str()))
+                let url = Self::api_url(format!("group/{raw_id}/summary").as_str());
+                client.get(url)
             })
             .await?;
         result.get("groupName").map_or(
