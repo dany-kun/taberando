@@ -1,91 +1,25 @@
-use std::collections::HashMap;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 use async_trait::async_trait;
 use rand::seq::IteratorRandom;
-use serde::de::{Error, Visitor};
+
 use serde_json::Value;
 
 use crate::app::coordinates::Coordinates;
 use crate::app::core::{Meal, Place};
 use crate::app::jar::Jar;
-use crate::gcp::constants::BASE_URL;
-use crate::http::{HttpClient, HttpResult};
-
-const FIREBASE_API_V2_CURRENT_DRAW_KEY: &str = "current_draw";
-const FIREBASE_API_V2_PLACES_KEY: &str = "places";
-const FIREBASE_API_V2_SLOTS_KEY: &str = "timeslots";
-const FIREBASE_API_V2_PLACE_NAME_TABLE: &str = "place_id_name";
-const FIREBASE_API_V2_PLACE_COORDINATES_TABLE: &str = "place_id_coordinates";
-const LABEL_PATH: &str = "label";
-
-const CLOSE_PLACE_RADIUS_METER: f32 = 1000_f32;
-
-impl From<Meal> for &str {
-    fn from(meal: Meal) -> Self {
-        match meal {
-            Meal::Lunch => "昼だけ",
-            Meal::Dinner => "夜だけ",
-        }
-    }
-}
-
-pub struct FirebaseApiV2 {
-    client: reqwest::Client,
-}
+use crate::gcp::constants::{
+    BASE_URL, FIREBASE_API_V2_CURRENT_DRAW_KEY, FIREBASE_API_V2_PLACES_KEY,
+    FIREBASE_API_V2_PLACE_COORDINATES_TABLE, FIREBASE_API_V2_PLACE_NAME_TABLE,
+    FIREBASE_API_V2_SLOTS_KEY, LABEL_PATH,
+};
+use crate::gcp::http_api::FirebaseApiV2;
+use crate::http::HttpResult;
 
 #[derive(Debug, serde::Deserialize, serde::Serialize, Clone)]
 pub struct ApiV2Place {
-    name: String,
+    pub(crate) name: String,
     timeslot: Vec<Meal>,
-}
-
-impl Meal {
-    fn serialized(&self) -> &'static str {
-        match self {
-            Meal::Lunch => "昼",
-            Meal::Dinner => "夜",
-        }
-    }
-}
-
-impl serde::Serialize for Meal {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(self.serialized())
-    }
-}
-
-struct MealVisitor;
-
-impl<'de> Visitor<'de> for MealVisitor {
-    type Value = Meal;
-
-    fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
-        write!(formatter, "A string representing a meal time slot")
-    }
-
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-    where
-        E: Error,
-    {
-        match v {
-            "昼" => Result::Ok(Meal::Lunch),
-            "夜" => Result::Ok(Meal::Dinner),
-            _ => Result::Err(E::custom(format!("Unknown meal value {v}"))),
-        }
-    }
-}
-
-impl<'de> serde::Deserialize<'de> for Meal {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        deserializer.deserialize_str(MealVisitor)
-    }
 }
 
 #[async_trait]
@@ -129,7 +63,6 @@ struct AppendedKey {
 impl FirebaseApi for FirebaseApiV2 {
     async fn add_label(&self, jar: &Jar, label: &str) -> HttpResult<String> {
         let _ = self
-            .client
             .make_json_request(|client| client.put(self.firebase_url(jar, LABEL_PATH)).json(label))
             .await?;
         Ok(label.to_string())
@@ -138,7 +71,6 @@ impl FirebaseApi for FirebaseApiV2 {
     async fn get_current_draw(&self, jar: &Jar) -> HttpResult<Option<Place>> {
         // Get the current draw key
         let key: Option<String> = self
-            .client
             .make_json_request(|client| {
                 client.get(self.firebase_url(jar, FIREBASE_API_V2_CURRENT_DRAW_KEY))
             })
@@ -189,7 +121,6 @@ impl FirebaseApi for FirebaseApiV2 {
 
     async fn add_place(&self, jar: &Jar, place_name: &str, meals: &[Meal]) -> HttpResult<Place> {
         let response: AppendedKey = self
-            .client
             .make_json_request(|client| {
                 client
                     .post(self.firebase_url(jar, FIREBASE_API_V2_PLACES_KEY))
@@ -202,7 +133,7 @@ impl FirebaseApi for FirebaseApiV2 {
 
         // Store the timeslot to tables
         let _: Vec<Value> = futures::future::try_join_all(meals.iter().map(|meal| {
-            self.client.make_json_request(|client| {
+            self.make_json_request(|client| {
                 client
                     .put(
                         self.firebase_url(
@@ -216,7 +147,7 @@ impl FirebaseApi for FirebaseApiV2 {
                             .as_str(),
                         ),
                     )
-                    .json(&serde_json::Value::Bool(true))
+                    .json(&Value::Bool(true))
             })
         }))
         .await?;
@@ -225,7 +156,6 @@ impl FirebaseApi for FirebaseApiV2 {
         // Should be done in a transaction + need monitoring..if this fails we corrupt our DB data...
         let added_place_key = response.key;
         let _place_name: String = self
-            .client
             .make_json_request(|client| {
                 client
                     .put(
@@ -251,32 +181,27 @@ impl FirebaseApi for FirebaseApiV2 {
         place: &Place,
         coordinates: &Coordinates,
     ) -> HttpResult<()> {
-        self.client
-            .make_json_request(|client| {
-                client
-                    .put(
-                        self.firebase_url(
-                            jar,
-                            format!("{}/{}", FIREBASE_API_V2_PLACE_COORDINATES_TABLE, place.key)
-                                .as_str(),
-                        ),
-                    )
-                    .json(coordinates)
-            })
-            .await?;
+        self.make_json_request(|client| {
+            client
+                .put(self.firebase_url(
+                    jar,
+                    format!("{}/{}", FIREBASE_API_V2_PLACE_COORDINATES_TABLE, place.key).as_str(),
+                ))
+                .json(coordinates)
+        })
+        .await?;
         Ok(())
     }
 
     async fn remove_drawn_place(&self, jar: &Jar, _place: Option<&Place>) -> HttpResult<()> {
         // TODO use the passed parameter
         if let Some(_drawn_place) = self.get_current_draw(jar).await? {
-            self.client
-                .make_json_request(|client| {
-                    client.delete(self.firebase_url(jar, FIREBASE_API_V2_CURRENT_DRAW_KEY))
-                })
-                .await?;
+            self.make_json_request(|client| {
+                client.delete(self.firebase_url(jar, FIREBASE_API_V2_CURRENT_DRAW_KEY))
+            })
+            .await?;
         }
-        HttpResult::Ok(())
+        Ok(())
     }
 
     // https://firebase.google.com/docs/database/rest/save-data#section-conditional-requests
@@ -296,13 +221,10 @@ impl FirebaseApi for FirebaseApiV2 {
         ];
 
         for bucket in buckets {
-            self.client
-                .make_request(|client| {
-                    client.delete(
-                        self.firebase_url(jar, format!("{}/{}", bucket, &place.key).as_str()),
-                    )
-                })
-                .await?;
+            self.make_request(|client| {
+                client.delete(self.firebase_url(jar, format!("{}/{}", bucket, &place.key).as_str()))
+            })
+            .await?;
         }
 
         self.remove_drawn_place(jar, Some(place)).await?;
@@ -311,98 +233,5 @@ impl FirebaseApi for FirebaseApiV2 {
 
     fn firebase_url(&self, jar: &Jar, path: &str) -> String {
         format!("{BASE_URL}/v2/{jar}/{path}.json")
-    }
-}
-
-impl FirebaseApiV2 {
-    pub fn new(client: reqwest::Client) -> FirebaseApiV2 {
-        FirebaseApiV2 { client }
-    }
-
-    async fn get_current_draw_name(&self, jar: &Jar, draw_key: &str) -> HttpResult<Option<String>> {
-        // Get the current draw name from the key
-        let place: Option<String> = self
-            .client
-            .make_json_request(|client| {
-                client.get(self.firebase_url(
-                    jar,
-                    format!("{FIREBASE_API_V2_PLACE_NAME_TABLE}/{draw_key}").as_str(),
-                ))
-            })
-            .await?;
-        Ok(place)
-    }
-
-    pub async fn get_all_places(&self, jar: &Jar) -> HttpResult<Vec<Place>> {
-        let places: HashMap<String, ApiV2Place> = self
-            .client
-            .make_json_request(|client| {
-                client.get(self.firebase_url(jar, FIREBASE_API_V2_PLACES_KEY))
-            })
-            .await?;
-        Ok(places
-            .iter()
-            .map(|(key, place)| Place {
-                key: key.clone(),
-                name: place.name.clone(),
-            })
-            .collect())
-    }
-
-    pub async fn update_current_draw(&self, jar: &Jar, drawn_place_key: &str) -> HttpResult<()> {
-        let _: Value = self
-            .client
-            .make_json_request(|client| {
-                client
-                    .put(self.firebase_url(jar, FIREBASE_API_V2_CURRENT_DRAW_KEY))
-                    .json(drawn_place_key)
-            })
-            .await?;
-        Ok(())
-    }
-
-    async fn get_list_of_places_keys(
-        &self,
-        jar: &Jar,
-        meal: &Meal,
-    ) -> HttpResult<Option<HashMap<String, serde_json::Value>>> {
-        // Very un-efficient since we are retrieving the whole set of places for a meal...
-        let place_response: Option<HashMap<String, serde_json::Value>> = self
-            .client
-            .make_json_request(|client| {
-                client
-                    .get(self.firebase_url(
-                        jar,
-                        format!("{}/{}", FIREBASE_API_V2_SLOTS_KEY, meal.serialized()).as_str(),
-                    ))
-                    .query(&[("shallow", "true")])
-            })
-            .await?;
-        Ok(place_response)
-    }
-
-    async fn find_close_places(
-        &self,
-        jar: &Jar,
-        meal_places: HashMap<String, Value>,
-        origin: &Coordinates,
-    ) -> HttpResult<Vec<String>> {
-        // First get all places with coordinates....(not efficient...)
-        let located_places = self
-            .client
-            .make_json_request::<HashMap<String, Coordinates>, _>(|client| {
-                client.get(self.firebase_url(jar, FIREBASE_API_V2_PLACE_COORDINATES_TABLE))
-            })
-            .await?;
-        // Filter all places with coordinates close enough
-        let closed_places = located_places
-            .into_iter()
-            .filter_map(|(key, c)| {
-                (c.distance(origin) <= CLOSE_PLACE_RADIUS_METER && meal_places.contains_key(&key))
-                    .then_some(key)
-            })
-            .into_iter()
-            .collect();
-        Ok(closed_places)
     }
 }

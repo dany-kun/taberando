@@ -21,6 +21,10 @@ path = "src/bin/migration_v2.rs"
 name = "geo_location"
 path = "src/bin/geo_location.rs"
 
+[[bin]]
+name = "label_group"
+path = "src/bin/label_group.rs"
+
 [build-dependencies]
 serde_json = "1.0.74"
 
