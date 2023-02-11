@@ -1,14 +1,14 @@
 use std::collections::HashMap;
-use std::fmt::Formatter;
+use std::fmt::{Debug, Formatter};
 
-use crate::app::coordinates::Coordinates;
 use async_trait::async_trait;
 use rand::seq::IteratorRandom;
-
 use serde::de::{Error, Visitor};
 use serde_json::Value;
 
+use crate::app::coordinates::Coordinates;
 use crate::app::core::{Meal, Place};
+use crate::app::jar::Jar;
 use crate::gcp::constants::BASE_URL;
 use crate::http::{HttpClient, HttpResult};
 
@@ -20,8 +20,6 @@ const FIREBASE_API_V2_PLACE_COORDINATES_TABLE: &str = "place_id_coordinates";
 const LABEL_PATH: &str = "label";
 
 const CLOSE_PLACE_RADIUS_METER: f32 = 1000_f32;
-
-pub(crate) type Jar = String;
 
 impl From<Meal> for &str {
     fn from(meal: Meal) -> Self {

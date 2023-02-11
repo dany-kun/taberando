@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
+use crate::app::jar::{Jar, JarError};
 use async_trait::async_trait;
 use reqwest::header::{HeaderValue, CONTENT_TYPE};
 use reqwest::Body;
 
 use crate::http::{ApiError, Empty, HttpClient, HttpResult};
-use crate::line::http::LineClient;
+use crate::line::http::{LineChannel, LineClient};
 
 use super::json::*;
 
@@ -30,6 +31,8 @@ pub trait LineApi {
     async fn update_line_webhook_url(&self, url: &str) -> HttpResult<Empty>;
 
     async fn send_messages(&self, message: &Message) -> HttpResult<Empty>;
+
+    async fn get_jar_info(&self, jar: &Jar) -> HttpResult<String>;
 
     fn api_url(path: &str) -> String {
         format!("{BASE_LINE_URL}/{path}")
@@ -137,5 +140,25 @@ impl LineApi for LineClient {
     async fn send_messages(&self, message: &Message) -> HttpResult<Empty> {
         self.make_json_request(|client| client.post(Self::api_url("message/push")).json(message))
             .await
+    }
+
+    async fn get_jar_info(&self, jar: &Jar) -> HttpResult<String> {
+        let raw_id = jar.line_channel().and_then(|channel| match channel {
+            LineChannel::User(_) => Err(JarError),
+            LineChannel::Room { .. } => Err(JarError),
+            LineChannel::Group { id, .. } => Ok(id),
+        })?;
+
+        let result: HashMap<String, String> = self
+            .make_json_request(|client| {
+                client.get(Self::api_url(format!("group/{raw_id}/summary").as_str()))
+            })
+            .await?;
+        result.get("groupName").map_or(
+            Err(ApiError::Unknown {
+                message: "Could not get groupName from group info".to_string(),
+            }),
+            |a| Ok(a.to_string()),
+        )
     }
 }

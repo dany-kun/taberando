@@ -1,3 +1,4 @@
+use server::app::jar::Jar;
 use std::collections::HashMap;
 
 use server::bing::http::{get_bing_context, BingClient, BingError};
@@ -17,10 +18,8 @@ async fn main() {
 
     let db_group = group.unwrap();
     println!("{db_group:?}");
-    let places = firebase_api
-        .get_all_places(&db_group.to_string())
-        .await
-        .unwrap();
+    let jar = &Jar::new(&db_group.to_string());
+    let places = firebase_api.get_all_places(jar).await.unwrap();
     let client = BingClient::default();
 
     let mut results: HashMap<&String, BingError> = HashMap::new();
@@ -31,7 +30,7 @@ async fn main() {
         match result {
             Ok(coordinates) => {
                 let _ = firebase_api
-                    .set_place_coordinates(&db_group.to_string(), place, &coordinates)
+                    .set_place_coordinates(jar, place, &coordinates)
                     .await;
             }
             Err(e) => {

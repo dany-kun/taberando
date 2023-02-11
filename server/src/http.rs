@@ -1,3 +1,4 @@
+use crate::app::jar::JarError;
 use async_trait::async_trait;
 use reqwest::{Client, Response};
 use serde::de::DeserializeOwned;
@@ -14,6 +15,14 @@ pub enum ApiError {
     Network { error: reqwest::Error },
     Http { code: u16, message: String },
     Unknown { message: String },
+}
+
+impl From<JarError> for ApiError {
+    fn from(_value: JarError) -> Self {
+        ApiError::Unknown {
+            message: "JarError".to_string(),
+        }
+    }
 }
 
 #[async_trait]

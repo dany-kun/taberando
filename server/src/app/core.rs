@@ -1,8 +1,7 @@
 use crate::app::agent::Agent;
 use crate::app::coordinates::Coordinates;
-use crate::app::core::Client::Line;
 use crate::bing::http::BingClient;
-use crate::gcp::api::{FirebaseApi, Jar};
+use crate::gcp::api::FirebaseApi;
 use crate::line::http::{LineChannel, LineClient};
 
 #[derive(Debug)]
@@ -33,32 +32,6 @@ pub enum Meal {
 pub struct Place {
     pub key: String,
     pub name: String,
-}
-
-impl From<&Client> for Jar {
-    fn from(client: &Client) -> Self {
-        match client {
-            Line(channel) => match channel {
-                LineChannel::User(id) => format!("user_{id}"),
-                LineChannel::Room { id, .. } => format!("room_{id}"),
-                LineChannel::Group { id, .. } => format!("group_{id}"),
-            },
-        }
-    }
-}
-
-struct JarError;
-
-impl From<std::io::Error> for JarError {
-    fn from(_: std::io::Error) -> Self {
-        JarError
-    }
-}
-
-impl From<serde_json::Error> for JarError {
-    fn from(_: serde_json::Error) -> Self {
-        JarError
-    }
 }
 
 pub async fn handle_action<T: FirebaseApi + Sync>(
