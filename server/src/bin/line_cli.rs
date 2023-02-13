@@ -1,4 +1,4 @@
-use clap::{App, AppSettings, Arg, ArgMatches};
+use clap::{Arg, ArgMatches};
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -6,48 +6,32 @@ use server::line::api::LineApi;
 use server::line::http::LineClient;
 use server::line::json::RichMenu;
 
-const COMMANDS: [Command; 6] = [
-    Command {
-        action: CommandAction::List,
-        help: "List channel menus",
-    },
-    Command {
-        action: CommandAction::Delete,
-        help: "Delete channel menu",
-    },
-    Command {
-        action: CommandAction::Create,
-        help: "Create a channel menu",
-    },
-    Command {
-        action: CommandAction::Default,
-        help: "Get channel default menu",
-    },
-    Command {
-        action: CommandAction::SetDefault,
-        help: "Set channel default menu",
-    },
-    Command {
-        action: CommandAction::SetAlias,
-        help: "Set channel menu alias",
-    },
+const COMMANDS: [CommandAction; 6] = [
+    CommandAction::List,
+    CommandAction::Delete,
+    CommandAction::Create,
+    CommandAction::Default,
+    CommandAction::SetDefault,
+    CommandAction::SetAlias,
 ];
 
 #[tokio::main]
 async fn main() {
     env_logger::init();
-    let line_token_arg = Arg::new("line-token").short('t').takes_value(true);
-    let mut menu_app = clap::App::new("menu")
+    let line_token_arg = Arg::new("line-token").short('t');
+    let mut menu_app = clap::Command::new("menu")
         .about("Manage line menus")
-        .setting(AppSettings::SubcommandRequiredElseHelp);
+        .subcommand_required(true)
+        .arg_required_else_help(true);
     for command in COMMANDS {
-        let app: App<'static> = command.into();
+        let app: clap::Command = command.into();
         menu_app = menu_app.subcommand(app.arg(line_token_arg.clone()));
     }
 
-    let matches = clap::App::new("line")
+    let matches = clap::Command::new("line")
         .version("1.0.0")
-        .setting(AppSettings::SubcommandRequiredElseHelp)
+        .subcommand_required(true)
+        .arg_required_else_help(true)
         .subcommand(menu_app)
         .get_matches();
 
@@ -61,14 +45,14 @@ async fn main() {
                     println!("{result:?}")
                 }
                 CommandAction::Delete => {
-                    let menu_id = m.value_of("id").unwrap();
+                    let menu_id = m.get_one::<String>("id").unwrap();
                     get_http_client(m).delete_rich_menu(menu_id).await.unwrap();
                     println!("Menu {menu_id} deleted")
                 }
 
                 CommandAction::Create => {
-                    let json_path = m.value_of("json").unwrap();
-                    let image_path = m.value_of("image").unwrap();
+                    let json_path = m.get_one::<String>("json").unwrap();
+                    let image_path = m.get_one::<String>("image").unwrap();
                     let content = std::fs::read_to_string(json_path).unwrap();
                     let menu = serde_json::from_str::<RichMenu>(&content).unwrap();
                     let image = std::fs::read(image_path).unwrap();
@@ -79,15 +63,15 @@ async fn main() {
 
                 CommandAction::Default => {
                     let result = get_http_client(m)
-                        .get_default_menu(m.value_of("id"))
+                        .get_default_menu(m.get_one::<String>("id").map(|a| a.as_str()))
                         .await
                         .unwrap();
                     println!("{result}")
                 }
 
                 CommandAction::SetDefault => {
-                    let menu_id = m.value_of("menu").unwrap();
-                    let user_id = m.value_of("id");
+                    let menu_id = m.get_one::<String>("menu").unwrap();
+                    let user_id = m.get_one::<String>("id").map(|a| a.as_str());
                     get_http_client(m)
                         .set_rich_menu(menu_id, user_id)
                         .await
@@ -102,8 +86,8 @@ async fn main() {
                 }
 
                 CommandAction::SetAlias => {
-                    let menu_id = m.value_of("menu").unwrap();
-                    let alias = m.value_of("alias").unwrap();
+                    let menu_id = m.get_one::<String>("menu").unwrap();
+                    let alias = m.get_one::<String>("alias").unwrap();
                     get_http_client(m)
                         .set_rich_menu_alias(menu_id, alias)
                         .await
@@ -117,8 +101,9 @@ async fn main() {
 
 fn get_http_client(m: &ArgMatches) -> LineClient {
     let token = m
-        .value_of_t("line-token")
-        .or_else(|_| std::env::var("LINE_TOKEN"))
+        .get_one::<String>("line-token")
+        .map(|a| a.to_string())
+        .or_else(|| std::env::var("LINE_TOKEN").ok())
         .expect("Please specify a line token");
     LineClient::new(&token)
 }
@@ -139,43 +124,45 @@ enum CommandAction {
     SetAlias,
 }
 
-struct Command<'a> {
-    action: CommandAction,
-    help: &'a str,
+impl CommandAction {
+    fn help(&self) -> &str {
+        match self {
+            CommandAction::List => "List channel menus",
+            CommandAction::Delete => "Delete channel menu",
+            CommandAction::Create => "Create a channel menu",
+            CommandAction::Default => "Get channel default menu",
+            CommandAction::SetDefault => "Set channel default menu",
+            CommandAction::SetAlias => "Set channel menu alias",
+        }
+    }
 }
 
-impl From<Command<'static>> for App<'static> {
-    fn from(command: Command<'static>) -> Self {
-        let action_name = serde_json::to_string(&command.action)
-            .unwrap()
-            .trim_matches('"')
-            .to_string();
-        let app = clap::App::new(action_name).about(command.help);
-        match command.action {
+impl From<CommandAction> for clap::Command {
+    fn from(action: CommandAction) -> Self {
+        let command_name = serde_json::to_string(&action)
+            .map(|a| a.trim_matches('"').to_string())
+            .unwrap();
+        let app = clap::Command::new(command_name).about(action.help().to_string());
+        match action {
             CommandAction::List => app,
-            CommandAction::Delete => {
-                app.arg(Arg::new("id").short('i').required(true).takes_value(true))
-            }
+            CommandAction::Delete => app.arg(Arg::new("id").short('i').required(true)),
             CommandAction::Create => app
                 .arg(
                     Arg::new("json")
                         .help("Path to the source json file")
                         .short('j')
-                        .required(true)
-                        .takes_value(true),
+                        .required(true),
                 )
                 .arg(
                     Arg::new("image")
                         .help("Path to the source image file")
                         .short('i')
-                        .required(true)
-                        .takes_value(true),
+                        .required(true),
                 ),
             CommandAction::Default => app.arg(
                 Arg::new("id")
                     .short('i')
                     .required(false)
-                    .takes_value(true)
                     .help("Optional group/room/user id"),
             ),
             CommandAction::SetDefault => app
@@ -183,32 +170,18 @@ impl From<Command<'static>> for App<'static> {
                     Arg::new("id")
                         .short('i')
                         .required(false)
-                        .takes_value(true)
                         .help("Optional group/room/user id"),
                 )
-                .arg(
-                    Arg::new("menu")
-                        .short('m')
-                        .required(true)
-                        .takes_value(true)
-                        .help("Menu id"),
-                ),
+                .arg(Arg::new("menu").short('m').required(true).help("Menu id")),
 
             CommandAction::SetAlias => app
                 .arg(
                     Arg::new("alias")
                         .short('a')
                         .required(true)
-                        .takes_value(true)
                         .help("Alias to set on the menu"),
                 )
-                .arg(
-                    Arg::new("menu")
-                        .short('m')
-                        .required(true)
-                        .takes_value(true)
-                        .help("Menu id"),
-                ),
+                .arg(Arg::new("menu").short('m').required(true).help("Menu id")),
         }
     }
 }
