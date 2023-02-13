@@ -1,7 +1,8 @@
-use crate::gcp;
 use constants::Error;
 use gcp::constants;
 use gcp::constants::FOLDER_PATH;
+
+use crate::gcp;
 
 pub(crate) struct OAuth {
     pub(crate) token: String,
@@ -38,7 +39,7 @@ pub(crate) async fn get_oauth_token() -> Result<OAuth, yup_oauth2::Error> {
     // obtain a token that can be sent e.g. as Bearer token.
     let token = auth.token(scopes).await?;
     Ok(OAuth {
-        token: token.as_str().to_string(),
+        token: token.token().unwrap().to_string(),
         project_id: secret.project_id.unwrap(),
     })
 }
