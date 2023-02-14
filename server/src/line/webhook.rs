@@ -1,3 +1,4 @@
+use base64::Engine;
 use ring::hmac;
 use tokio::sync::mpsc::Sender;
 use warp::http::{HeaderMap, StatusCode};
@@ -49,7 +50,8 @@ pub fn route(
                     .map_err(|_| warp::reject::custom(InvalidWebhookError))
                     .and_then(|text| {
                         let signature = hmac::sign(&key, text.as_bytes());
-                        let encoded = base64::encode(signature.as_ref());
+                        let encoded =
+                            base64::engine::general_purpose::STANDARD.encode(signature.as_ref());
                         if header == encoded {
                             serde_json::from_str::<Payload>(text)
                                 .map_err(|_| warp::reject::custom(InvalidWebhookError))
