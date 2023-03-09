@@ -158,6 +158,7 @@ fn message_to_action(event: &Event) -> Option<Action> {
     match message.message_type.as_str() {
         "text" => match message.text.as_ref()?.to_lowercase().trim() {
             "refresh" => Some(Action::Refresh(client)),
+            "更新" => Some(Action::Refresh(client)),
             "whoami" => Some(Action::WhoAmI(client)),
             _ => None,
         },

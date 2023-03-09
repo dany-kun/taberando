@@ -4,24 +4,55 @@
     <meta charset="UTF-8"/>
     <title>Add</title>
     <style>
-      .form-element {
-        margin: 10px;
-      }
+    body {
+    font-size: xx-large;
+  }
+
+  button {
+    font-size: xx-large;
+  }
+
+  .input-form {
+    display: flex;
+    flex-direction: column;
+    align-items: left;
+  }
+
+  label {
+    margin: 5px 10px 5px 0;
+  }
+
+  input[type="radio"] {
+    transform: scale(1.5);
+    margin-right: 10px;
+  }
+
+  input[type="text"] {
+    transform: scale(1.5);
+    transform-origin: bottom left;
+    margin-right: 10px;
+  }
+
+  .form-element {
+    margin: 10px;
+  }
+
 
     </style>
 </head>
 <body>
 <form action="" method="post" class="input-form">
-    <div class="form-element place-input">
-        <label for="place">入力</label>
+    <div class="form-element place-input" style="">
+        <label for="place">お店の名前</label>
         <input type="text" name="place" id="place" required/>
     </div>
     <div class="form-element time-input">
         いつ？
+
         <input type="radio" name="time" id="both" value="both"
-               checked="checked"/>昼また夜
-        <input type="radio" name="time" id="lunch" value="lunch"/>昼
-        <input type="radio" name="time" id="dinner" value="dinner"/>夜
+               checked="checked"/><label>昼また夜</label>
+        <input type="radio" name="time" id="lunch" value="lunch"/><label>昼</label>
+        <input type="radio" name="time" id="dinner" value="dinner"/><label>夜</label>
     </div>
     <button class="form-element">送信</button>
 </form>
