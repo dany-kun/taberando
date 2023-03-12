@@ -16,9 +16,28 @@ pub enum LineChannel {
 }
 
 #[derive(Clone)]
-pub struct LineClient(pub(crate) reqwest::Client);
+pub struct LineClient(reqwest::Client);
 
 impl LineClient {
+    pub fn new(line_token: &str) -> Self {
+        let mut header_map = HeaderMap::new();
+
+        let authorization_header = &*format!("Bearer {line_token}");
+        let mut auth_value = HeaderValue::from_str(authorization_header).unwrap();
+        auth_value.set_sensitive(true);
+        header_map.append(AUTHORIZATION, auth_value);
+
+        header_map.append(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+
+        LineClient(
+            reqwest::Client::builder()
+                .default_headers(header_map)
+                .connection_verbose(true)
+                .build()
+                .unwrap(),
+        )
+    }
+
     pub async fn send_to(&self, id: &str, message: MessageContent) -> HttpResult<Empty> {
         self.send_messages(&Message {
             to: id.to_string(),
@@ -42,23 +61,4 @@ impl HttpClient for LineClient {
     {
         self.0.make_request(to_request).await
     }
-}
-
-pub fn get_line_client(line_token: String) -> LineClient {
-    let mut header_map = HeaderMap::new();
-
-    let authorization_header = &*format!("Bearer {line_token}");
-    let mut auth_value = HeaderValue::from_str(authorization_header).unwrap();
-    auth_value.set_sensitive(true);
-    header_map.append(AUTHORIZATION, auth_value);
-
-    header_map.append(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-
-    LineClient(
-        reqwest::Client::builder()
-            .default_headers(header_map)
-            .connection_verbose(true)
-            .build()
-            .unwrap(),
-    )
 }

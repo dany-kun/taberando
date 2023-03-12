@@ -21,6 +21,10 @@ path = "src/bin/migration_v2.rs"
 name = "geo_location"
 path = "src/bin/geo_location.rs"
 
+[[bin]]
+name = "label_group"
+path = "src/bin/label_group.rs"
+
 [build-dependencies]
 serde_json = "1.0.74"
 
@@ -28,17 +32,17 @@ serde_json = "1.0.74"
 log = "0.4.14"
 reqwest = { version = "0.11", features = ["blocking", "json", "stream"] }
 async-trait = "0.1.52"
-env_logger = "0.9.0"
-tokio = { version = "1.18.4", features = ["full"] }
+env_logger = "0.10.0"
+tokio = { version = "1.25.0", features = ["full"] }
 futures = "0.3.25"
 warp = "0.3.2"
 serde = { version = "1.0.133", features = ["derive"] }
 serde_json = "1.0.74"
 regex = "1.5.5"
 rand = "0.8.4"
-clap = { version = "3.0.10", features = ["derive"] }
+clap = { version = "4.1.4", features = ["derive", "string"] }
 # GCP OAuth
-yup-oauth2 = "6.2.0"
+yup-oauth2 = "8.1.0"
 # Crypto
 ring = "0.16.20"
-base64 = "0.13.0"
+base64 = "0.21.0"

@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
+use server::app::jar::Jar;
 use server::bing::http::{get_bing_context, BingClient, BingError};
-use server::gcp::api::{FirebaseApi, FirebaseApiV2};
-use server::gcp::client::get_firebase_client;
+use server::gcp::api::FirebaseApi;
+pub(crate) use server::gcp::http_api::FirebaseApiV2;
 
 #[tokio::main]
 async fn main() {
     // env_logger::init();
-    let firebase_client = get_firebase_client().await;
-    let firebase_api = FirebaseApiV2::new(firebase_client);
+    let firebase_api = FirebaseApiV2::default().await;
     let args: Vec<String> = std::env::args().collect();
     let group = args.get(1);
     if group.is_none() {
@@ -17,10 +17,8 @@ async fn main() {
 
     let db_group = group.unwrap();
     println!("{db_group:?}");
-    let places = firebase_api
-        .get_all_places(&db_group.to_string())
-        .await
-        .unwrap();
+    let jar = &Jar::new(&db_group.to_string());
+    let places = firebase_api.get_all_places(jar).await.unwrap();
     let client = BingClient::default();
 
     let mut results: HashMap<&String, BingError> = HashMap::new();
@@ -31,7 +29,7 @@ async fn main() {
         match result {
             Ok(coordinates) => {
                 let _ = firebase_api
-                    .set_place_coordinates(&db_group.to_string(), place, &coordinates)
+                    .set_place_coordinates(jar, place, &coordinates)
                     .await;
             }
             Err(e) => {
