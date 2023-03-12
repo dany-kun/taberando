@@ -133,7 +133,6 @@ impl FirebaseApiV2 {
                 (c.distance(origin) <= CLOSE_PLACE_RADIUS_METER && meal_places.contains_key(&key))
                     .then_some(key)
             })
-            .into_iter()
             .collect();
         Ok(closed_places)
     }
